@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Open Panel — universal Linux installer (Ubuntu / Debian / CentOS / Rocky / AlmaLinux / RHEL)
-# install.sh version: 2026-06-13-4
+# install.sh version: 2026-06-13-5
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/open-panel}"
@@ -8,10 +8,11 @@ PORT="${OPEN_PANEL_PORT:-8888}"
 PANEL_USER="${PANEL_USER:-root}"
 FROM_SOURCE="${FROM_SOURCE:-0}"
 REPO_URL="${REPO_URL:-https://github.com/luuuunet/open-panel.git}"
-BRANCH="${BRANCH:-main}"
+SOURCE_REF="${SOURCE_REF:-v0.1.0}"
 RELEASE_DIR="${RELEASE_DIR:-}"
 
 export GIT_TERMINAL_PROMPT=0
+export GOTOOLCHAIN=local
 
 log() { echo "[open-panel] $*"; }
 die() { echo "[open-panel] ERROR: $*" >&2; exit 1; }
@@ -57,10 +58,10 @@ install_deps() {
       apt-get install -y -qq curl ca-certificates tar xz-utils sqlite3 build-essential
       ;;
     dnf)
-      dnf install -y curl ca-certificates git sqlite
+      dnf install -y curl ca-certificates tar xz sqlite
       ;;
     yum)
-      yum install -y curl ca-certificates git sqlite
+      yum install -y curl ca-certificates tar xz sqlite
       ;;
   esac
 }
@@ -78,7 +79,11 @@ install_go_if_needed() {
     aarch64|arm64) GOARCH="arm64" ;;
     *) die "不支持的 CPU 架构: $ARCH" ;;
   esac
-  curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz" | tar -C /usr/local -xzf -
+  local tgz="/tmp/go${GO_VERSION}.linux-${GOARCH}.tar.gz"
+  curl -fL --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 3 \
+    -o "$tgz" "https://go.dev/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz"
+  tar -C /usr/local -xzf "$tgz"
+  rm -f "$tgz"
   export PATH="/usr/local/go/bin:$PATH"
   grep -q '/usr/local/go/bin' /etc/profile || echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
 }
@@ -106,8 +111,11 @@ install_node_if_needed() {
     aarch64|arm64) NODEARCH="arm64" ;;
     *) die "不支持的 CPU 架构: $ARCH" ;;
   esac
-  curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODEARCH}.tar.xz" \
-    | tar -xJ -C /usr/local --strip-components=1
+  local txz="/tmp/node-v${NODE_VERSION}-linux-${NODEARCH}.tar.xz"
+  curl -fL --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 3 \
+    -o "$txz" "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODEARCH}.tar.xz"
+  tar -xJf "$txz" -C /usr/local --strip-components=1
+  rm -f "$txz"
   hash -r 2>/dev/null || true
 }
 
@@ -120,24 +128,39 @@ repo_slug() {
 
 fetch_repo() {
   local dest="$1"
-  local slug archive carchive
+  local slug archive carchive tgz
   slug="$(repo_slug)"
-  archive="https://github.com/${slug}/archive/refs/heads/${BRANCH}.tar.gz"
-  carchive="https://codeload.github.com/${slug}/tar.gz/refs/heads/${BRANCH}"
-  log "下载源码包: github.com/${slug} (${BRANCH})"
+  if [[ "$SOURCE_REF" == v* ]]; then
+    archive="https://github.com/${slug}/archive/refs/tags/${SOURCE_REF}.tar.gz"
+    carchive="https://codeload.github.com/${slug}/tar.gz/${SOURCE_REF}"
+  else
+    archive="https://github.com/${slug}/archive/refs/heads/${SOURCE_REF}.tar.gz"
+    carchive="https://codeload.github.com/${slug}/tar.gz/refs/heads/${SOURCE_REF}"
+  fi
+  tgz="$(mktemp /tmp/open-panel-src.XXXXXX.tar.gz)"
+  log "下载源码包 ${SOURCE_REF}（约 1–5 分钟，请耐心等待）..."
+  if curl -fL --connect-timeout 30 --max-time 900 --retry 3 --retry-delay 5 \
+      --progress-bar -o "$tgz" "$carchive"; then
+    log "下载完成 ($(du -h "$tgz" | awk '{print $1}'))"
+  elif curl -fL --connect-timeout 30 --max-time 900 --retry 3 --retry-delay 5 \
+      --progress-bar -o "$tgz" "$archive"; then
+    log "下载完成 ($(du -h "$tgz" | awk '{print $1}'))"
+  else
+    rm -f "$tgz"
+    die "无法下载源码 github.com/${slug} @ ${SOURCE_REF}（请检查网络）"
+  fi
+  log "解压源码包..."
   mkdir -p "$dest"
-  if curl -fsSL "$archive" | tar -xz -C "$dest" --strip-components=1; then
-    return 0
+  tar -xzf "$tgz" -C "$dest" --strip-components=1
+  rm -f "$tgz"
+  if [[ ! -f "$dest/backend/internal/services/logs/logs.go" ]]; then
+    die "源码不完整（缺少 logs 模块）。请使用: SOURCE_REF=v0.1.0 sudo bash $0"
   fi
-  log "GitHub archive 失败，尝试 codeload..."
-  if curl -fsSL "$carchive" | tar -xz -C "$dest" --strip-components=1; then
-    return 0
-  fi
-  die "无法下载源码 github.com/${slug}（请检查网络，或设置 REPO_URL）"
+  log "源码就绪: ${SOURCE_REF}"
 }
 
 build_from_source() {
-  log "从源码构建..."
+  log "从源码构建（小内存机器可能需要 10–20 分钟）..."
   install_go_if_needed
   install_node_if_needed
   WORK="$(mktemp -d)"
@@ -150,11 +173,15 @@ build_from_source() {
     SRC="$WORK/src"
   fi
   export PATH="/usr/local/go/bin:/usr/local/bin:$PATH"
+  export GOTOOLCHAIN=local
+  export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=768}"
+  log "编译后端..."
   cd "$SRC/backend"
   go mod download
   CGO_ENABLED=0 go build -ldflags="-s -w" -o "$INSTALL_DIR/open-panel" ./cmd/server
   CGO_ENABLED=0 go build -ldflags="-s -w" -o "$INSTALL_DIR/op" ./cmd/op
   if command -v npm >/dev/null 2>&1; then
+    log "构建前端（npm，请耐心等待）..."
     cd "$SRC/frontend"
     if [[ -f package-lock.json ]]; then npm ci; else npm install; fi
     npm run build
@@ -164,8 +191,9 @@ build_from_source() {
     rm -rf "$INSTALL_DIR/web"
     cp -a "$SRC/backend/web" "$INSTALL_DIR/web"
   else
-    die "未找到 npm，且仓库内无预构建 frontend（backend/web 为空）。请安装 Node.js 18+ 后重试"
+    die "未找到 npm，且仓库内无预构建 frontend。请安装 Node.js 18+ 后重试"
   fi
+  log "构建完成"
 }
 
 install_binary_layout() {
@@ -237,7 +265,7 @@ open_firewall() {
 main() {
   echo "========================================="
   echo "  Open Panel 多系统安装 (Linux)"
-  echo "  installer: 2026-06-13-4"
+  echo "  installer: 2026-06-13-5"
   echo "========================================="
   require_root
   detect_os

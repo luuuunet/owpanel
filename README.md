@@ -39,13 +39,15 @@ Centralized logs across panel, system, websites, CDN, and WAF — with **AI anal
 Ubuntu, Debian, CentOS, Rocky, or AlmaLinux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/luuuunet/open-panel/v0.1.0/scripts/install.sh | sudo bash
+curl -fsSL https://cdn.jsdelivr.net/gh/luuuunet/open-panel@v0.1.1/scripts/install.sh | sudo bash
 ```
 
-If you still see an old installer (no `installer: 2026-06-13-4` line), use jsDelivr:
+Or download first (recommended on small VPS):
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/luuuunet/open-panel@v0.1.0/scripts/install.sh | sudo bash
+curl -fsSL https://cdn.jsdelivr.net/gh/luuuunet/open-panel@v0.1.1/scripts/install.sh -o /tmp/install.sh
+grep "installer:" /tmp/install.sh   # should show 2026-06-13-5
+sudo bash /tmp/install.sh
 ```
 
 Or from source:
