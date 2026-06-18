@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Open Panel — universal Linux installer (Ubuntu / Debian / CentOS / Rocky / AlmaLinux / RHEL)
+# install.sh version: 2026-06-13-2
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/open-panel}"
@@ -53,7 +54,7 @@ install_deps() {
     apt)
       export DEBIAN_FRONTEND=noninteractive
       apt-get update -qq
-      apt-get install -y -qq curl ca-certificates git sqlite3 build-essential
+      apt-get install -y -qq curl ca-certificates tar xz-utils sqlite3 build-essential
       ;;
     dnf)
       dnf install -y curl ca-certificates git sqlite
@@ -110,12 +111,29 @@ install_node_if_needed() {
   hash -r 2>/dev/null || true
 }
 
-clone_repo() {
+repo_slug() {
+  local url="${REPO_URL%.git}"
+  url="${url#https://github.com/}"
+  url="${url#http://github.com/}"
+  echo "$url"
+}
+
+fetch_repo() {
   local dest="$1"
-  log "克隆源码: $REPO_URL ($BRANCH)"
-  if ! git clone --depth 1 -b "$BRANCH" "$REPO_URL" "$dest"; then
-    die "无法克隆 $REPO_URL（请检查网络，或设置 REPO_URL 指向可访问的仓库）"
+  local slug archive carchive
+  slug="$(repo_slug)"
+  archive="https://github.com/${slug}/archive/refs/heads/${BRANCH}.tar.gz"
+  carchive="https://codeload.github.com/${slug}/tar.gz/refs/heads/${BRANCH}"
+  log "下载源码包: github.com/${slug} (${BRANCH})"
+  mkdir -p "$dest"
+  if curl -fsSL "$archive" | tar -xz -C "$dest" --strip-components=1; then
+    return 0
   fi
+  log "GitHub archive 失败，尝试 codeload..."
+  if curl -fsSL "$carchive" | tar -xz -C "$dest" --strip-components=1; then
+    return 0
+  fi
+  die "无法下载源码 github.com/${slug}（请检查网络，或设置 REPO_URL）"
 }
 
 build_from_source() {
@@ -124,11 +142,11 @@ build_from_source() {
   install_node_if_needed
   WORK="$(mktemp -d)"
   trap 'rm -rf "$WORK"' EXIT
-  if [[ -d "$INSTALL_DIR/.git" ]]; then
+  if [[ -d "$INSTALL_DIR/.git" ]] && command -v git >/dev/null 2>&1; then
     git -C "$INSTALL_DIR" pull --ff-only || true
     SRC="$INSTALL_DIR"
   else
-    clone_repo "$WORK/src"
+    fetch_repo "$WORK/src"
     SRC="$WORK/src"
   fi
   export PATH="/usr/local/go/bin:/usr/local/bin:$PATH"
@@ -219,6 +237,7 @@ open_firewall() {
 main() {
   echo "========================================="
   echo "  Open Panel 多系统安装 (Linux)"
+  echo "  installer: 2026-06-13-2"
   echo "========================================="
   require_root
   detect_os
