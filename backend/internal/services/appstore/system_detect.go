@@ -32,6 +32,7 @@ func (s *Service) reconcileInstalledFromSystem(throttled bool) {
 	}
 	s.ensureCatalog()
 	s.reconcileDockerInstallRecords()
+	s.reconcileNodeInstallRecords()
 	for _, item := range mergedCatalog() {
 		key := item.Key
 		s.ClearSimulatedIfRealPresent(key)
@@ -54,6 +55,28 @@ func (s *Service) reconcileInstalledFromSystem(throttled bool) {
 			"installed":     true,
 			"status":        status,
 			"version":       version,
+			"install_error": "",
+		}).Error
+		s.InvalidateLiveStatus(key)
+	}
+}
+
+func (s *Service) reconcileNodeInstallRecords() {
+	for _, item := range mergedCatalog() {
+		key := item.Key
+		if !strings.HasPrefix(key, "nodejs") {
+			continue
+		}
+		app, err := s.Get(key)
+		if err != nil || !app.Installed || IsSimulatedInstall(key, s.dataDir) {
+			continue
+		}
+		if nodePackagePresent(key, s.dataDir) {
+			continue
+		}
+		_ = s.db.Model(&app).Updates(map[string]interface{}{
+			"installed":     false,
+			"status":        "stopped",
 			"install_error": "",
 		}).Error
 		s.InvalidateLiveStatus(key)
@@ -135,6 +158,9 @@ func systemPackagePresent(key, dataDir string) bool {
 	}
 	if strings.HasPrefix(key, "java") {
 		return javaPackagePresent(key, dataDir)
+	}
+	if strings.HasPrefix(key, "nodejs") {
+		return nodePackagePresent(key, dataDir)
 	}
 
 	spec, ok := resolvePackageSpec(key)

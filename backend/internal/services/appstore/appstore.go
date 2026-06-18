@@ -388,16 +388,17 @@ func (s *Service) SyncCatalog() int {
 }
 
 type PHPVersionInfo struct {
-	Key       string `json:"key"`
-	Version   string `json:"version"`
-	Status    string `json:"status"`
-	Default   bool   `json:"default"`
-	Port      int    `json:"port"`
-	PID       int    `json:"pid"`
-	Mode      string `json:"mode"`
-	Binary    string `json:"binary"`
-	Message   string `json:"message,omitempty"`
-	Installed bool   `json:"installed"`
+	Key         string `json:"key"`
+	Version     string `json:"version"`
+	Status      string `json:"status"`
+	Default     bool   `json:"default"`
+	Port        int    `json:"port"`
+	PID         int    `json:"pid"`
+	Mode        string `json:"mode"`
+	Binary      string `json:"binary"`
+	InstallPath string `json:"install_path,omitempty"`
+	Message     string `json:"message,omitempty"`
+	Installed   bool   `json:"installed"`
 }
 
 func (s *Service) ListPHPVersions() []PHPVersionInfo {
@@ -408,11 +409,9 @@ func (s *Service) ListPHPVersions() []PHPVersionInfo {
 		if !strings.HasPrefix(item.Key, "php") || item.Key == "phpmyadmin" {
 			continue
 		}
-		app, err := s.Get(item.Key)
-		installed := err == nil && app.Installed
 		st := mgr.Status(item.Key)
-		if st.Binary != "" {
-			installed = true
+		if st.Binary == "" {
+			continue
 		}
 		status := "stopped"
 		if st.Running {
@@ -421,7 +420,8 @@ func (s *Service) ListPHPVersions() []PHPVersionInfo {
 		out = append(out, PHPVersionInfo{
 			Key: item.Key, Version: item.Version, Status: status,
 			Default: item.Key == "php83", Port: st.Port, PID: st.PID,
-			Mode: st.Mode, Binary: st.Binary, Message: st.Message, Installed: installed,
+			Mode: st.Mode, Binary: st.Binary, InstallPath: st.Binary,
+			Message: st.Message, Installed: true,
 		})
 	}
 	return out
@@ -714,6 +714,9 @@ func (s *Service) detectAppStatus(key string) string {
 	}
 	if strings.HasPrefix(key, "java") {
 		return detectJavaStatusForInstall(key, s.dataDir)
+	}
+	if strings.HasPrefix(key, "nodejs") {
+		return detectNodeStatusForInstall(key, s.dataDir)
 	}
 	if key == "pm2" {
 		if fileExists(filepath.Join(s.dataDir, "server", "pm2", ".open-panel-installed")) {

@@ -283,7 +283,7 @@ onMounted(() => {
       </el-table-column>
     </el-table>
 
-    <el-empty v-if="!loading && !tableData.length" :description="t('runtime.empty')" />
+    <el-empty v-if="!loading && !tableData.length" :description="isPhpTab ? t('runtime.phpEmpty') : t('runtime.empty')" />
 
     <el-drawer v-model="dialogVisible" :title="t('runtime.createTitle')" size="520px" direction="rtl">
       <el-form :model="form" label-position="top">

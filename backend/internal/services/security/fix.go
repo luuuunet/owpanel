@@ -98,7 +98,7 @@ func (s *Service) Fix(key string) (*FixResult, error) {
 		return &FixResult{
 			Success:      false,
 			NeedsGuide:   true,
-			GuideMessage: "请在「面板设置」查看安全入口，或在终端运行 bt 28 重新生成",
+			GuideMessage: "请在「面板设置」查看安全入口，或在终端运行 sudo op config 重新生成",
 			RedirectPath: "/settings",
 		}, nil
 	case "panel_ip_whitelist", "strong_password":
