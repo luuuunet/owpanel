@@ -34,23 +34,21 @@ Centralized logs across panel, system, websites, CDN, and WAF — with **AI anal
   <img src="docs/images/log-center-ai.png" alt="Log Center with AI assistant and service log shortcuts" width="920" />
 </p>
 
-### Install
+### Install (fast — recommended)
 
-Ubuntu, Debian, CentOS, Rocky, or AlmaLinux:
-
-```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/luuuunet/open-panel@v0.1.1/scripts/install.sh | sudo bash
-```
-
-Or download first (recommended on small VPS):
+One command. Downloads a **pre-built binary** (~16 MB, **1–2 minutes** on a 1 GB VPS):
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/luuuunet/open-panel@v0.1.1/scripts/install.sh -o /tmp/install.sh
-grep "installer:" /tmp/install.sh   # should show 2026-06-13-5
-sudo bash /tmp/install.sh
+curl -fsSL https://cdn.jsdelivr.net/gh/luuuunet/open-panel@v0.1.2/scripts/install.sh | sudo bash
 ```
 
-Or from source:
+Force source build (slow, 15–30 min on small VPS):
+
+```bash
+FROM_SOURCE=1 curl -fsSL https://cdn.jsdelivr.net/gh/luuuunet/open-panel@v0.1.2/scripts/install.sh | sudo bash
+```
+
+Or from a local clone:
 
 ```bash
 git clone https://github.com/luuuunet/open-panel.git

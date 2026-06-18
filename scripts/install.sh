@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Open Panel — universal Linux installer (Ubuntu / Debian / CentOS / Rocky / AlmaLinux / RHEL)
-# install.sh version: 2026-06-13-5
+# install.sh version: 2026-06-13-6
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/open-panel}"
@@ -9,6 +9,7 @@ PANEL_USER="${PANEL_USER:-root}"
 FROM_SOURCE="${FROM_SOURCE:-0}"
 REPO_URL="${REPO_URL:-https://github.com/luuuunet/open-panel.git}"
 SOURCE_REF="${SOURCE_REF:-v0.1.1}"
+RELEASE_VERSION="${RELEASE_VERSION:-v0.1.2}"
 RELEASE_DIR="${RELEASE_DIR:-}"
 
 export GIT_TERMINAL_PROMPT=0
@@ -49,19 +50,35 @@ detect_os() {
   log "检测到: $OS_PRETTY，包管理器: $PKG"
 }
 
-install_deps() {
-  log "安装基础依赖..."
+install_deps_minimal() {
+  log "安装基础依赖 (curl/tar)..."
   case "$PKG" in
     apt)
       export DEBIAN_FRONTEND=noninteractive
       apt-get update -qq
-      apt-get install -y -qq curl ca-certificates tar xz-utils sqlite3 build-essential
+      apt-get install -y -qq curl ca-certificates tar
       ;;
     dnf)
-      dnf install -y curl ca-certificates tar xz sqlite
+      dnf install -y curl ca-certificates tar
       ;;
     yum)
-      yum install -y curl ca-certificates tar xz sqlite
+      yum install -y curl ca-certificates tar
+      ;;
+  esac
+}
+
+install_build_deps() {
+  log "安装编译依赖 (Go/Node/build-essential)..."
+  case "$PKG" in
+    apt)
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get install -y -qq xz-utils sqlite3 build-essential
+      ;;
+    dnf)
+      dnf install -y xz sqlite
+      ;;
+    yum)
+      yum install -y xz sqlite
       ;;
   esac
 }
@@ -161,6 +178,7 @@ fetch_repo() {
 
 build_from_source() {
   log "从源码构建（小内存机器可能需要 10–20 分钟）..."
+  install_build_deps
   install_go_if_needed
   install_node_if_needed
   WORK="$(mktemp -d)"
@@ -253,6 +271,45 @@ install_from_release() {
   return 1
 }
 
+release_package_name() {
+  case "$(uname -m)" in
+    x86_64) echo "open-panel-linux-amd64" ;;
+    aarch64|arm64) echo "open-panel-linux-arm64" ;;
+    *) die "不支持的 CPU 架构: $(uname -m)" ;;
+  esac
+}
+
+install_from_github_release() {
+  [[ "$FROM_SOURCE" == "1" ]] && return 1
+  local slug pkg ver url tgz tmpdir
+  slug="$(repo_slug)"
+  pkg="$(release_package_name)"
+  ver="$RELEASE_VERSION"
+  url="https://github.com/${slug}/releases/download/${ver}/${pkg}.tar.gz"
+  tgz="$(mktemp /tmp/open-panel-rel.XXXXXX.tar.gz)"
+  log "快速安装：下载预编译包 ${ver} (${pkg})..."
+  if ! curl -fL --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 5 \
+      --progress-bar -o "$tgz" "$url"; then
+    rm -f "$tgz"
+    log "预编译包不可用 (${ver})，将尝试源码构建..."
+    return 1
+  fi
+  log "解压预编译包 ($(du -h "$tgz" | awk '{print $1}'))..."
+  tmpdir="$(mktemp -d)"
+  tar -xzf "$tgz" -C "$tmpdir"
+  rm -f "$tgz"
+  local root="$tmpdir/$pkg"
+  [[ -d "$root" ]] || root="$tmpdir"
+  [[ -f "$root/open-panel" && -d "$root/web" ]] || die "预编译包格式错误"
+  cp -f "$root/open-panel" "$INSTALL_DIR/open-panel"
+  cp -f "$root/op" "$INSTALL_DIR/op" 2>/dev/null || true
+  rm -rf "$INSTALL_DIR/web"
+  cp -a "$root/web" "$INSTALL_DIR/web"
+  rm -rf "$tmpdir"
+  log "预编译包安装完成（约 1–2 分钟）"
+  return 0
+}
+
 open_firewall() {
   if command -v ufw >/dev/null 2>&1 && ufw status | grep -qi active; then
     ufw allow "$PORT/tcp" || true
@@ -265,14 +322,16 @@ open_firewall() {
 main() {
   echo "========================================="
   echo "  Open Panel 多系统安装 (Linux)"
-  echo "  installer: 2026-06-13-5"
+  echo "  installer: 2026-06-13-6"
   echo "========================================="
   require_root
   detect_os
-  install_deps
+  install_deps_minimal
   mkdir -p "$INSTALL_DIR"
   if install_from_release; then
     log "发布包已部署"
+  elif install_from_github_release; then
+    :
   elif [[ "$FROM_SOURCE" == "1" ]] || [[ ! -f "$INSTALL_DIR/open-panel" ]]; then
     build_from_source
   else
