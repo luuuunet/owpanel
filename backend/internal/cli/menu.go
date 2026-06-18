@@ -97,6 +97,7 @@ func printMainMenu() {
 	printMenuItem("10", "Clear login lockout", "")
 	printMenuItem("11", "Repair panel", "")
 	printMenuItem("12", "Reset MySQL root password", "")
+	printMenuItem("13", "Uninstall panel", "Remove service and program files")
 	printMenuItem("0", "Exit", "")
 	fmt.Println()
 }
@@ -144,6 +145,11 @@ func RunMenu() error {
 			runErr = RepairPanel(ctx)
 		case "12":
 			runErr = ForceChangeMySQLRoot(ctx)
+		case "13":
+			runErr = UninstallPanel(ctx)
+			if runErr == nil {
+				return nil
+			}
 		default:
 			printError("Unknown option: " + choice)
 		}
@@ -169,6 +175,7 @@ func printHelp() {
 	fmt.Println("  op stop         Stop the panel service")
 	fmt.Println("  op start        Start the panel service")
 	fmt.Println("  op repair       Run panel repair checks")
+	fmt.Println("  op uninstall    Remove panel service and files (sudo)")
 	fmt.Println("  op help         Show this help")
 	fmt.Println()
 }
@@ -202,6 +209,8 @@ func RunCommand(arg string) error {
 		return ShowPanelErrorLog(ctx)
 	case "repair", "11":
 		return RepairPanel(ctx)
+	case "uninstall", "13":
+		return UninstallPanel(ctx)
 	default:
 		return fmt.Errorf("unknown command %q (try: op help)", arg)
 	}

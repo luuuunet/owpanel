@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Open Panel — universal Linux installer (Ubuntu / Debian / CentOS / Rocky / AlmaLinux / RHEL)
-# install.sh version: 2026-06-13-7
+# install.sh version: 2026-06-13-8
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/open-panel}"
@@ -9,7 +9,7 @@ PANEL_USER="${PANEL_USER:-root}"
 FROM_SOURCE="${FROM_SOURCE:-0}"
 REPO_URL="${REPO_URL:-https://github.com/luuuunet/open-panel.git}"
 SOURCE_REF="${SOURCE_REF:-v0.1.1}"
-RELEASE_VERSION="${RELEASE_VERSION:-v0.1.2}"
+RELEASE_VERSION="${RELEASE_VERSION:-v0.1.4}"
 RELEASE_DIR="${RELEASE_DIR:-}"
 
 export GIT_TERMINAL_PROMPT=0
@@ -375,6 +375,7 @@ print_install_summary() {
   echo "    op info       Show panel URLs, port, and data directory"
   echo "    op config     Change port, security entrance, or SSL"
   echo "    op restart    Restart the panel service"
+  echo "    op uninstall  Remove panel service and files (sudo)"
   echo ""
   echo "  Change your password after first login."
   echo "========================================="
