@@ -1,0 +1,21 @@
+services:
+  open-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: open-panel
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    volumes:
+      - panel-data:/opt/open-panel/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/nginx:/etc/nginx
+      - /www:/www
+    environment:
+      - OPEN_PANEL_PORT=8888
+      - OPEN_PANEL_DATA=/opt/open-panel/data
+    privileged: true
+
+volumes:
+  panel-data:

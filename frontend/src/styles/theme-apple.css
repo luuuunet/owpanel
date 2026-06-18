@@ -1,0 +1,238 @@
+/**
+ * Apple-inspired design layer for Open Panel
+ * Keeps Cloudflare color palette (--cf-orange, etc.)
+ * https://www.apple.com/
+ */
+
+:root {
+  /* Apple layout tokens (colors unchanged) */
+  --apple-radius-sm: 10px;
+  --apple-radius-md: 14px;
+  --apple-radius-lg: 18px;
+  --apple-radius-xl: 22px;
+  --apple-radius-pill: 980px;
+
+  --apple-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --apple-ease-spring: cubic-bezier(0.34, 1.2, 0.64, 1);
+
+  --apple-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --apple-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --apple-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+
+  --apple-glass: rgba(255, 255, 255, 0.72);
+  --apple-glass-border: rgba(0, 0, 0, 0.06);
+  --apple-glass-blur: saturate(180%) blur(20px);
+
+  --el-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --el-border-radius-base: var(--apple-radius-sm);
+  --el-border-radius-small: 8px;
+}
+
+/* Typography — Apple-like hierarchy */
+html {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.page-header h2 {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+/* Cards — floating surfaces */
+.el-card {
+  border: none !important;
+  border-radius: var(--apple-radius-lg) !important;
+  box-shadow: var(--apple-shadow-sm) !important;
+  background: var(--cf-surface) !important;
+  transition: box-shadow 0.35s var(--apple-ease), transform 0.35s var(--apple-ease);
+}
+
+.el-card__header {
+  border-bottom: 1px solid var(--apple-glass-border) !important;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  padding: 16px 20px !important;
+  background: transparent;
+}
+
+.el-card__body {
+  padding: 20px !important;
+}
+
+.el-card.is-hover-shadow:hover {
+  box-shadow: var(--apple-shadow-md) !important;
+  transform: translateY(-1px);
+}
+
+/* Buttons — refined, Apple-style */
+.el-button {
+  border-radius: var(--apple-radius-sm);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition: all 0.25s var(--apple-ease);
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--cf-orange);
+  --el-button-border-color: var(--cf-orange);
+  --el-button-text-color: #fff;
+  --el-button-hover-bg-color: var(--cf-orange-hover);
+  --el-button-hover-border-color: var(--cf-orange-hover);
+  --el-button-hover-text-color: #fff;
+  --el-button-active-bg-color: #d96a0a;
+  --el-button-active-border-color: #d96a0a;
+  --el-button-active-text-color: #fff;
+  border-radius: var(--apple-radius-pill);
+  padding-left: 20px;
+  padding-right: 20px;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(246, 130, 31, 0.25);
+}
+
+.el-button--primary:not(.is-link):not(.is-text):not(.is-plain):not(.is-disabled) {
+  background-color: var(--cf-orange);
+  border-color: var(--cf-orange);
+  color: #fff;
+}
+
+.el-button--primary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(246, 130, 31, 0.3);
+}
+
+.el-button--primary:active {
+  transform: scale(0.98);
+}
+
+.el-button--default {
+  border-color: var(--apple-glass-border);
+  background: var(--cf-surface);
+}
+
+.el-button--default:hover {
+  background: var(--el-fill-color-light);
+  border-color: #d1d5db;
+}
+
+/* Inputs — clean inset fields */
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  border-radius: var(--apple-radius-sm) !important;
+  box-shadow: none !important;
+  border: 1px solid var(--apple-glass-border);
+  transition: border-color 0.2s var(--apple-ease), box-shadow 0.2s var(--apple-ease);
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover {
+  border-color: #d1d5db;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused {
+  border-color: var(--cf-orange) !important;
+  box-shadow: 0 0 0 3px rgba(246, 130, 31, 0.15) !important;
+}
+
+/* Tables */
+.el-table {
+  --el-table-border-color: var(--apple-glass-border);
+  --el-table-header-bg-color: rgba(248, 250, 252, 0.8);
+  border-radius: var(--apple-radius-md);
+  overflow: hidden;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cf-text-muted);
+}
+
+.el-table td.el-table__cell {
+  font-size: 14px;
+}
+
+/* Dialog & drawer — sheet style */
+.el-dialog,
+.el-drawer {
+  border-radius: var(--apple-radius-xl) !important;
+  box-shadow: var(--apple-shadow-lg) !important;
+  border: 1px solid var(--apple-glass-border);
+}
+
+.el-dialog__header {
+  border-bottom: 1px solid var(--apple-glass-border);
+  padding: 20px 24px 16px !important;
+}
+
+.el-dialog__title {
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.el-dialog__body {
+  padding: 20px 24px !important;
+}
+
+/* Tabs */
+.el-tabs__item {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.el-tabs__item.is-active {
+  font-weight: 600;
+}
+
+.el-tabs__active-bar {
+  border-radius: 2px;
+  height: 3px;
+}
+
+/* Tags */
+.el-tag {
+  border-radius: var(--apple-radius-pill);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Alerts */
+.el-alert {
+  border-radius: var(--apple-radius-md);
+  border: none;
+}
+
+/* Pagination */
+.el-pagination button,
+.el-pager li {
+  border-radius: 8px;
+}
+
+/* Message / notification */
+.el-message {
+  border-radius: var(--apple-radius-md);
+  box-shadow: var(--apple-shadow-md);
+  border: 1px solid var(--apple-glass-border);
+}
+
+/* Scrollbar — minimal */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}

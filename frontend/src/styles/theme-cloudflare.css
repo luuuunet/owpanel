@@ -1,0 +1,151 @@
+/**
+ * Open Panel base palette (orange primary)
+ * Apple-inspired visual layer: theme-apple.css
+ */
+:root {
+  --cf-orange: #f6821f;
+  --cf-orange-hover: #e56f10;
+  --cf-orange-light: #fdebd7;
+  --cf-navy: #1d2433;
+  --cf-navy-light: #2b3447;
+  --cf-bg: #f4f5f7;
+  --cf-surface: #ffffff;
+  --cf-border: #e2e8f0;
+  --cf-text: #1f2937;
+  --cf-text-muted: #64748b;
+  --cf-link: #0051c3;
+  --cf-shadow: 0 1px 3px rgba(29, 36, 51, 0.06), 0 1px 2px rgba(29, 36, 51, 0.04);
+  --cf-shadow-lg: 0 10px 24px rgba(29, 36, 51, 0.08);
+
+  /* Sidebar (light, matches panel surface) */
+  --cf-rail-width: 56px;
+  --cf-panel-width: 260px;
+  --cf-rail-bg: var(--cf-surface);
+  --cf-panel-bg: var(--cf-surface);
+  --cf-sidebar-border: var(--cf-border);
+
+  /* Element Plus overrides */
+  --el-color-primary: var(--cf-orange);
+  --el-color-primary-light-3: #f9a055;
+  --el-color-primary-light-5: #fbc78a;
+  --el-color-primary-light-7: #fde4c4;
+  --el-color-primary-light-8: #fef0dc;
+  --el-color-primary-light-9: #fff7ed;
+  --el-color-primary-dark-2: #d96a0a;
+
+  --el-color-success: #059669;
+  --el-color-warning: #d97706;
+  --el-color-danger: #dc2626;
+  --el-color-info: #64748b;
+
+  --el-bg-color: var(--cf-surface);
+  --el-bg-color-page: var(--cf-bg);
+  --el-text-color-primary: var(--cf-text);
+  --el-text-color-regular: #374151;
+  --el-text-color-secondary: var(--cf-text-muted);
+  --el-text-color-placeholder: #94a3b8;
+
+  --el-border-color: var(--cf-border);
+  --el-border-color-light: #eef1f5;
+  --el-border-color-lighter: #f1f5f9;
+  --el-fill-color-light: #f8fafc;
+  --el-fill-color-lighter: #fafbfc;
+
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
+  --el-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+/* Cards — clean white surfaces */
+.el-card {
+  border: 1px solid var(--cf-border) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--cf-shadow) !important;
+}
+
+.el-card__header {
+  border-bottom: 1px solid var(--cf-border) !important;
+  font-weight: 600;
+  color: var(--cf-text);
+  padding: 14px 18px !important;
+}
+
+.el-card.is-hover-shadow:hover {
+  box-shadow: var(--cf-shadow-lg) !important;
+}
+
+/* Buttons */
+.el-button--primary {
+  --el-button-bg-color: var(--cf-orange);
+  --el-button-border-color: var(--cf-orange);
+  --el-button-hover-bg-color: var(--cf-orange-hover);
+  --el-button-hover-border-color: var(--cf-orange-hover);
+  --el-button-active-bg-color: #d96a0a;
+  --el-button-active-border-color: #d96a0a;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.el-button {
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+/* Tables */
+.el-table {
+  --el-table-border-color: var(--cf-border);
+  --el-table-header-bg-color: #f8fafc;
+  --el-table-header-text-color: var(--cf-text-muted);
+  border-radius: 8px;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Inputs */
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  border-radius: 8px !important;
+}
+
+/* Dialog & drawer */
+.el-dialog,
+.el-drawer {
+  border-radius: 12px;
+}
+
+.el-dialog__header {
+  border-bottom: 1px solid var(--cf-border);
+  margin-right: 0;
+  padding-bottom: 16px;
+}
+
+/* Tags */
+.el-tag--primary {
+  --el-tag-bg-color: var(--el-color-primary-light-9);
+  --el-tag-border-color: var(--el-color-primary-light-7);
+  --el-tag-text-color: #c05600;
+}
+
+/* Links in content */
+a {
+  color: var(--cf-link);
+}
+
+/* Scrollbar (webkit) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

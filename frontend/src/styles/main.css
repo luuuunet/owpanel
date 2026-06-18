@@ -1,0 +1,76 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  font-family: var(--el-font-family);
+  color: var(--cf-text);
+  background: var(--cf-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 28px;
+  gap: 16px;
+}
+
+.page-header h2 {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--cf-text);
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.page-header .subtitle,
+.page-header p {
+  font-size: 15px;
+  color: var(--cf-text-muted);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  margin-top: 6px;
+}
+
+.stat-card {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.stat-card .value {
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--cf-orange);
+  margin: 8px 0;
+  letter-spacing: -0.03em;
+}
+
+.stat-card .label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cf-text-muted);
+  letter-spacing: -0.01em;
+}
+
+/* Main content pages fill available width (sidebar excluded) */
+.auto-ops-page,
+.cluster-page,
+.dns-page,
+.cache-page,
+.protection-center,
+.settings-page,
+.devops-page,
+.uptime-page,
+.mail-page,
+.oss-page {
+  width: 100%;
+  max-width: none;
+}

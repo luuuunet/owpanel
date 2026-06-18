@@ -1,0 +1,101 @@
+# Go
+backend/bin/
+backend/tmp/
+__pycache__/
+*.pyc
+*.pyo
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Panel data (runtime)
+data/
+logs/
+*.db
+*.log
+
+# Build / release artifacts
+dist/
+backend/web/
+backend/open-panel.exe
+backend/reset-admin-linux
+backend/op-linux-amd64
+backend/op
+open-panel-linux
+open-panel-linux-amd64
+
+# Deploy secrets
+scripts/deploy.env
+
+# Internal server ops scripts (not for public repo)
+scripts/prod_*
+scripts/*.log
+scripts/ku.lulunet.cc.conf
+scripts/audit-*
+scripts/check-*
+scripts/cpu-*
+scripts/debug-*
+scripts/diag-*
+scripts/fix-*
+scripts/hotfix-*
+scripts/inspect-*
+scripts/mem-*
+scripts/monitor-*
+scripts/panel-*
+scripts/perf-*
+scripts/post-deploy-*
+scripts/repair-*
+scripts/restore-*
+scripts/rewrite-*
+scripts/server-*
+scripts/smoke-*
+scripts/test-*
+scripts/verify-*
+scripts/wp-*
+scripts/kafka-*
+scripts/java-*
+scripts/grep-*
+scripts/cleanup-*
+scripts/upload-binary.py
+scripts/deploy-fast.py
+scripts/deploy-verify.py
+scripts/deploy-pma-fix.py
+scripts/deploy-wp-db.py
+scripts/deploy-finish.py
+scripts/deploy-remote.py
+scripts/deploy-check.py
+scripts/deploy-bin.py
+scripts/deploy-web.py
+scripts/enable-*.py
+scripts/finish-*
+scripts/reenable-*
+scripts/patch-*
+scripts/gen-zh-tw-locale.py
+scripts/clean_panel_runtime.py
+
+# Secrets
+.env
+*.pem
+*.key
