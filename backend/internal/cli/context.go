@@ -81,20 +81,20 @@ func ensurePanelEnv() {
 			os.Setenv(m[1], strings.Trim(m[2], `"`))
 		}
 	}
-}
-
-func readLine(prompt string) string {
-	fmt.Print(prompt)
-	var s string
-	fmt.Scanln(&s)
-	return s
-}
-
-func readPassword(prompt string) string {
-	fmt.Print(prompt)
-	var s string
-	fmt.Scanln(&s)
-	return s
+	if os.Getenv("OPEN_PANEL_DATA") == "" {
+		if exe, err := os.Executable(); err == nil {
+			home := filepath.Dir(exe)
+			if st, err := os.Stat(filepath.Join(home, "data", "panel.db")); err == nil && !st.IsDir() {
+				os.Setenv("OPEN_PANEL_HOME", home)
+				os.Setenv("OPEN_PANEL_DATA", filepath.Join(home, "data"))
+				if os.Getenv("OPEN_PANEL_WEB") == "" {
+					if st, err := os.Stat(filepath.Join(home, "web", "index.html")); err == nil && !st.IsDir() {
+						os.Setenv("OPEN_PANEL_WEB", filepath.Join(home, "web"))
+					}
+				}
+			}
+		}
+	}
 }
 
 func readInt(prompt string, def int) int {
@@ -107,9 +107,4 @@ func readInt(prompt string, def int) int {
 		return def
 	}
 	return n
-}
-
-func pause() {
-	fmt.Print("\nPress Enter to continue...")
-	fmt.Scanln()
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Open Panel — universal Linux installer (Ubuntu / Debian / CentOS / Rocky / AlmaLinux / RHEL)
-# install.sh version: 2026-06-13-9
+# install.sh version: 2026-06-13-10
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/open-panel}"
@@ -9,7 +9,7 @@ PANEL_USER="${PANEL_USER:-root}"
 FROM_SOURCE="${FROM_SOURCE:-0}"
 REPO_URL="${REPO_URL:-https://github.com/luuuunet/open-panel.git}"
 SOURCE_REF="${SOURCE_REF:-v0.1.1}"
-RELEASE_VERSION="${RELEASE_VERSION:-v0.1.6}"
+RELEASE_VERSION="${RELEASE_VERSION:-v0.1.7}"
 RELEASE_DIR="${RELEASE_DIR:-}"
 
 export GIT_TERMINAL_PROMPT=0

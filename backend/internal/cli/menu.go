@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/open-panel/open-panel/internal/auth"
 )
@@ -60,7 +62,10 @@ func RunPanelConfiguration(ctx *Context) error {
 		printMenuItem("3", "Toggle SSL setting", "")
 		printMenuItem("0", "Back", "")
 		fmt.Println()
-		choice := readLine("  Choice: ")
+		choice := strings.TrimSpace(readLine("  Choice: "))
+		if choice == "" {
+			continue
+		}
 		var runErr error
 		switch choice {
 		case "0":
@@ -99,6 +104,10 @@ func printMainMenu() {
 	printMenuItem("12", "Reset MySQL root password", "")
 	printMenuItem("13", "Uninstall panel", "Remove service and program files")
 	printMenuItem("0", "Exit", "")
+	if os.Getuid() != 0 {
+		fmt.Println()
+		printHint("Service control (restart/stop/logs) may require: sudo op")
+	}
 	fmt.Println()
 }
 
@@ -114,7 +123,10 @@ func RunMenu() error {
 
 	for {
 		printMainMenu()
-		choice := readLine("  Choice: ")
+		choice := strings.TrimSpace(readLine("  Choice: "))
+		if choice == "" {
+			continue
+		}
 		var runErr error
 		switch choice {
 		case "0":
@@ -159,8 +171,7 @@ func RunMenu() error {
 		if choice != "0" && choice != "2" {
 			pause()
 		}
-		clearScreen()
-		printBanner()
+		fmt.Println()
 	}
 }
 

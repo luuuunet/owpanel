@@ -18,23 +18,59 @@ func StartPanel() error    { return serviceAction("start") }
 func ReloadPanel() error   { return serviceAction("reload") }
 
 func serviceAction(action string) error {
-	if runtime.GOOS == "linux" {
-		if hasSystemctl() {
-			name := serviceName()
-			if action == "reload" {
-				action = "restart"
-			}
-			cmd := exec.Command("systemctl", action, name)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("systemctl %s %s: %w", action, name, err)
-			}
-			printSuccess(fmt.Sprintf("Panel %s via systemd (%s)", action, name))
-			return nil
-		}
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("service control requires Linux with systemd (service: %s)", serviceName())
 	}
-	return fmt.Errorf("service control requires Linux with systemd (service: %s)", serviceName())
+	if !hasSystemctl() {
+		return fmt.Errorf("systemctl not found (service: %s)", serviceName())
+	}
+	name := serviceName()
+	if action == "reload" {
+		action = "restart"
+	}
+	if err := runSystemctl(action, name); err != nil {
+		if os.Getuid() != 0 {
+			return fmt.Errorf("systemctl %s %s failed (try: sudo op %s): %w", action, name, action, err)
+		}
+		return fmt.Errorf("systemctl %s %s: %w", action, name, err)
+	}
+	printSuccess(fmt.Sprintf("Panel %s via systemd (%s)", systemctlPastTense(action), name))
+	return nil
+}
+
+func systemctlPastTense(action string) string {
+	switch action {
+	case "restart":
+		return "restarted"
+	case "start":
+		return "started"
+	case "stop":
+		return "stopped"
+	case "reload":
+		return "reloaded"
+	default:
+		return action + "ed"
+	}
+}
+
+func runSystemctl(action, unit string) error {
+	try := func(bin string, args ...string) error {
+		cmd := exec.Command(bin, args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		return cmd.Run()
+	}
+	args := []string{action, unit}
+	if err := try("systemctl", args...); err == nil {
+		return nil
+	} else if os.Getuid() == 0 {
+		return err
+	}
+	if _, err := exec.LookPath("sudo"); err != nil {
+		return err
+	}
+	return try("sudo", append([]string{"systemctl"}, args...)...)
 }
 
 func hasSystemctl() bool {
