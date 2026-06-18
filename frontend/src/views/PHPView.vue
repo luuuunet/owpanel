@@ -1,18 +1,14 @@
 <script setup lang="ts">
 
 import { onMounted, ref } from 'vue'
-
 import { useI18n } from 'vue-i18n'
-
+import { useRouter } from 'vue-router'
 import api, { resolveApiError } from '@/api'
-
 import SoftwareConfigDialog from '@/components/SoftwareConfigDialog.vue'
-
 import { ElMessage } from 'element-plus'
 
-
-
 const { t } = useI18n()
+const router = useRouter()
 
 
 
@@ -108,7 +104,7 @@ onMounted(load)
 
     <div class="page-header"><h2>PHP 管理</h2></div>
 
-    <el-table v-loading="loading" :data="versions" stripe>
+    <el-table v-if="versions.length" v-loading="loading" :data="versions" stripe>
 
       <el-table-column prop="version" label="版本" width="100" />
 
@@ -171,6 +167,16 @@ onMounted(load)
       </el-table-column>
 
     </el-table>
+
+    <el-empty
+      v-else-if="!loading"
+      :description="t('runtime.phpEmpty')"
+      :image-size="72"
+    >
+      <el-button type="primary" @click="router.push('/software')">
+        {{ t('nav.software') }}
+      </el-button>
+    </el-empty>
 
     <p v-if="versions.some(v => v.message)" class="hint">
 

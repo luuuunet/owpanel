@@ -7,8 +7,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"github.com/open-panel/open-panel/internal/services/php"
 )
 
 // ReconcileInstalledFromSystem syncs catalog install records with the host.
@@ -33,6 +31,7 @@ func (s *Service) reconcileInstalledFromSystem(throttled bool) {
 	s.ensureCatalog()
 	s.reconcileDockerInstallRecords()
 	s.reconcileNodeInstallRecords()
+	s.reconcilePHPInstallRecords()
 	for _, item := range mergedCatalog() {
 		key := item.Key
 		s.ClearSimulatedIfRealPresent(key)
@@ -142,7 +141,7 @@ func systemPackagePresent(key, dataDir string) bool {
 		return false
 	}
 	if strings.HasPrefix(key, "php") && key != "phpmyadmin" {
-		return php.NewManager(dataDir).Status(key).Binary != ""
+		return phpPanelInstalled(key, dataDir)
 	}
 	if key == "pm2" {
 		return detectPM2() == "running"

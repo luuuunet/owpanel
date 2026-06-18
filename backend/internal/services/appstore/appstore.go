@@ -409,18 +409,22 @@ func (s *Service) ListPHPVersions() []PHPVersionInfo {
 		if !strings.HasPrefix(item.Key, "php") || item.Key == "phpmyadmin" {
 			continue
 		}
-		st := mgr.Status(item.Key)
-		if st.Binary == "" {
+		if !s.phpVersionInstalledForListing(item.Key) {
 			continue
 		}
+		st := mgr.Status(item.Key)
 		status := "stopped"
 		if st.Running {
 			status = "running"
 		}
+		binary := st.Binary
+		if binary == "" {
+			binary = phpBinaryForKey(item.Key, s.dataDir)
+		}
 		out = append(out, PHPVersionInfo{
 			Key: item.Key, Version: item.Version, Status: status,
 			Default: item.Key == "php83", Port: st.Port, PID: st.PID,
-			Mode: st.Mode, Binary: st.Binary, InstallPath: st.Binary,
+			Mode: st.Mode, Binary: binary, InstallPath: binary,
 			Message: st.Message, Installed: true,
 		})
 	}
@@ -755,6 +759,9 @@ func (s *Service) ensurePHPReady(key string) error {
 	}
 	if app.Installed {
 		return nil
+	}
+	if !phpPanelInstalled(key, s.dataDir) {
+		return errors.New("software not installed")
 	}
 	st := php.NewManager(s.dataDir).Status(key)
 	if st.Binary == "" {

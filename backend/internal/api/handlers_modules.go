@@ -767,15 +767,7 @@ func (s *Server) handleSyncCursorModels(c *gin.Context) {
 }
 
 func (s *Server) handlePHPVersions(c *gin.Context) {
-	versions := s.appstore.ListPHPVersions()
-	if len(versions) == 0 {
-		response.OK(c, []gin.H{
-			{"key": "php83", "version": "8.3", "status": "stopped", "default": false,
-				"message": "请先在软件商店安装 PHP，或确保系统 PATH 中已有 php.exe"},
-		})
-		return
-	}
-	response.OK(c, versions)
+	response.OK(c, s.appstore.ListPHPVersions())
 }
 
 func (s *Server) handlePHPAction(c *gin.Context) {
