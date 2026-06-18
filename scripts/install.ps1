@@ -8,7 +8,7 @@ param(
     [string]$InstallDir = "C:\open-panel",
     [int]$Port = 8888,
     [switch]$FromSource,
-    [string]$RepoUrl = "https://github.com/open-panel/open-panel.git",
+    [string]$RepoUrl = "https://github.com/luuuunet/open-panel.git",
     [string]$Branch = "main"
 )
 

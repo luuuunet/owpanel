@@ -6,9 +6,11 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/open-panel}"
 PORT="${OPEN_PANEL_PORT:-8888}"
 PANEL_USER="${PANEL_USER:-root}"
 FROM_SOURCE="${FROM_SOURCE:-0}"
-REPO_URL="${REPO_URL:-https://github.com/open-panel/open-panel.git}"
+REPO_URL="${REPO_URL:-https://github.com/luuuunet/open-panel.git}"
 BRANCH="${BRANCH:-main}"
 RELEASE_DIR="${RELEASE_DIR:-}"
+
+export GIT_TERMINAL_PROMPT=0
 
 log() { echo "[open-panel] $*"; }
 die() { echo "[open-panel] ERROR: $*" >&2; exit 1; }
@@ -64,6 +66,7 @@ install_deps() {
 
 install_go_if_needed() {
   if command -v go >/dev/null 2>&1; then
+    export PATH="$(dirname "$(command -v go)"):$PATH"
     return
   fi
   log "安装 Go 1.22..."
@@ -79,32 +82,71 @@ install_go_if_needed() {
   grep -q '/usr/local/go/bin' /etc/profile || echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
 }
 
+install_node_if_needed() {
+  if command -v npm >/dev/null 2>&1; then
+    return
+  fi
+  log "安装 Node.js 18..."
+  case "$PKG" in
+    apt)
+      apt-get install -y -qq nodejs npm 2>/dev/null || true
+      ;;
+    dnf|yum)
+      $PKG install -y nodejs npm 2>/dev/null || true
+      ;;
+  esac
+  if command -v npm >/dev/null 2>&1; then
+    return
+  fi
+  NODE_VERSION="18.20.4"
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    x86_64) NODEARCH="x64" ;;
+    aarch64|arm64) NODEARCH="arm64" ;;
+    *) die "不支持的 CPU 架构: $ARCH" ;;
+  esac
+  curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODEARCH}.tar.xz" \
+    | tar -xJ -C /usr/local --strip-components=1
+  hash -r 2>/dev/null || true
+}
+
+clone_repo() {
+  local dest="$1"
+  log "克隆源码: $REPO_URL ($BRANCH)"
+  if ! git clone --depth 1 -b "$BRANCH" "$REPO_URL" "$dest"; then
+    die "无法克隆 $REPO_URL（请检查网络，或设置 REPO_URL 指向可访问的仓库）"
+  fi
+}
+
 build_from_source() {
   log "从源码构建..."
   install_go_if_needed
+  install_node_if_needed
   WORK="$(mktemp -d)"
   trap 'rm -rf "$WORK"' EXIT
   if [[ -d "$INSTALL_DIR/.git" ]]; then
     git -C "$INSTALL_DIR" pull --ff-only || true
     SRC="$INSTALL_DIR"
   else
-    git clone --depth 1 -b "$BRANCH" "$REPO_URL" "$WORK/src"
+    clone_repo "$WORK/src"
     SRC="$WORK/src"
   fi
-  export PATH="/usr/local/go/bin:$PATH"
+  export PATH="/usr/local/go/bin:/usr/local/bin:$PATH"
   cd "$SRC/backend"
   go mod download
   CGO_ENABLED=0 go build -ldflags="-s -w" -o "$INSTALL_DIR/open-panel" ./cmd/server
   CGO_ENABLED=0 go build -ldflags="-s -w" -o "$INSTALL_DIR/op" ./cmd/op
   if command -v npm >/dev/null 2>&1; then
     cd "$SRC/frontend"
-    npm ci
+    if [[ -f package-lock.json ]]; then npm ci; else npm install; fi
     npm run build
     rm -rf "$INSTALL_DIR/web"
     cp -a "$SRC/backend/web" "$INSTALL_DIR/web"
-  elif [[ -d "$SRC/backend/web" ]]; then
+  elif [[ -d "$SRC/backend/web" && -n "$(ls -A "$SRC/backend/web" 2>/dev/null)" ]]; then
     rm -rf "$INSTALL_DIR/web"
     cp -a "$SRC/backend/web" "$INSTALL_DIR/web"
+  else
+    die "未找到 npm，且仓库内无预构建 frontend（backend/web 为空）。请安装 Node.js 18+ 后重试"
   fi
 }
 
