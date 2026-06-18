@@ -48,7 +48,7 @@ var packageSpecs = map[string]packageSpec{
 	"postfix":       {Apt: []string{"postfix"}, Dnf: []string{"postfix"}, Service: "postfix"},
 	"dovecot":       {Apt: []string{"dovecot-core", "dovecot-imapd", "dovecot-pop3d"}, Dnf: []string{"dovecot"}, Service: "dovecot"},
 	"memcached":     {Apt: []string{"memcached"}, Dnf: []string{"memcached"}, Service: "memcached"},
-	"docker":        {Apt: []string{"docker.io", "docker-compose-plugin"}, Dnf: []string{"docker", "docker-compose-plugin"}, Service: "docker", WinPackages: []string{"Docker.DockerDesktop"}},
+	"docker":        {Apt: []string{"docker.io"}, Dnf: []string{"docker"}, Service: "docker", WinPackages: []string{"Docker.DockerDesktop"}},
 	"fail2ban":      {Apt: []string{"fail2ban"}, Dnf: []string{"fail2ban"}, Service: "fail2ban"},
 	"supervisor":    {Apt: []string{"supervisor"}, Dnf: []string{"supervisor"}, Service: "supervisor"},
 	"pm2":           {},

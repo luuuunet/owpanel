@@ -12,6 +12,11 @@ import (
 )
 
 func tryDockerInstall(key, version, installPath, dataDir string) (bool, error) {
+	if key == "docker" {
+		_ = version
+		_ = installPath
+		return true, installDockerEnginePackage()
+	}
 	if key == "kafka" {
 		return false, nil
 	}
@@ -124,32 +129,49 @@ func installDockerEngineLinux() error {
 		if err := runCommand("apt-get", "update", "-qq"); err != nil {
 			return fmt.Errorf("apt update: %w", err)
 		}
-		// Kafka 仅需 docker 引擎；docker-compose-plugin 在部分 Ubuntu 源中不可用，单独安装且失败不阻断。
 		if err := runCommand("apt-get", "install", "-y", "docker.io"); err != nil {
 			logInstallLine("apt 安装 docker.io 失败，尝试 Docker 官方脚本 …")
 			if err2 := installDockerViaOfficialScript(); err2 != nil {
 				return fmt.Errorf("apt install docker.io: %w; 官方脚本: %v", err, err2)
 			}
-		} else {
-			_ = runCommand("apt-get", "install", "-y", "docker-compose-plugin")
 		}
+		installDockerComposeOptional(mgr)
 		return nil
 	case "dnf", "yum":
-		pkgs := []string{"docker"}
 		if mgr == "dnf" {
-			if err := runCommand("dnf", append([]string{"install", "-y"}, pkgs...)...); err != nil {
+			if err := runCommand("dnf", "install", "-y", "docker"); err != nil {
 				return fmt.Errorf("dnf install docker: %w", err)
 			}
 		} else {
-			if err := runCommand("yum", append([]string{"install", "-y"}, pkgs...)...); err != nil {
+			if err := runCommand("yum", "install", "-y", "docker"); err != nil {
 				return fmt.Errorf("yum install docker: %w", err)
 			}
 		}
-		_ = runCommand(mgr, "install", "-y", "docker-compose-plugin")
+		installDockerComposeOptional(mgr)
 		return nil
 	default:
 		return fmt.Errorf("unsupported linux package manager (need apt/dnf/yum)")
 	}
+}
+
+func installDockerComposeOptional(mgr string) {
+	switch mgr {
+	case "apt":
+		if err := runCommand("apt-get", "install", "-y", "docker-compose-plugin"); err == nil {
+			return
+		}
+		if err := runCommand("apt-get", "install", "-y", "docker-compose"); err == nil {
+			return
+		}
+	case "dnf", "yum":
+		if err := runCommand(mgr, "install", "-y", "docker-compose-plugin"); err == nil {
+			return
+		}
+		if err := runCommand(mgr, "install", "-y", "docker-compose"); err == nil {
+			return
+		}
+	}
+	logInstallLine("提示: docker compose 插件未安装（可选）。Docker 引擎已可用，可稍后在软件商店重试或使用 get.docker.com 脚本。")
 }
 
 func installDockerViaOfficialScript() error {
