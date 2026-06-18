@@ -3,6 +3,7 @@ package analytics
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -52,6 +53,8 @@ const trafficKeepDays = 1
 const trafficPruneBatch = 10000
 const maxIngestLinesPerFile = 3000
 const maxMapCacheEntries = 8
+const maxInitialIngestBytes int64 = 5 * 1024 * 1024
+const tailIngestBytes int64 = 512 * 1024
 
 func NewService(db *gorm.DB, dataDir string, wafSvc *waf.Service, perf *performance.Service) *Service {
 	s := &Service{
@@ -184,6 +187,7 @@ func (s *Service) pollLoop() {
 }
 
 func (s *Service) startupMaintenance() {
+	go s.ensureGeoIP()
 	time.Sleep(3 * time.Second)
 	s.pruneOldTrafficHits(true)
 	s.dedupeTrafficHits()
@@ -201,6 +205,57 @@ func (s *Service) startupMaintenance() {
 			_ = s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error
 		}
 	}()
+}
+
+func (s *Service) ensureGeoIP() {
+	time.Sleep(2 * time.Second)
+	if s.geoDBReady() {
+		return
+	}
+	if _, err := s.InstallGeoIP(); err != nil {
+		log.Printf("Open Panel: GeoLite2 auto-install skipped: %v", err)
+		return
+	}
+	log.Printf("Open Panel: GeoLite2 database ready for traffic map")
+}
+
+// RecordHTTPAccess stores a live panel HTTP hit for the traffic map.
+func (s *Service) RecordHTTPAccess(ip, method, path string, status int, bytes uint64, referer, userAgent string) {
+	if s.db == nil || isPrivateIP(ip) {
+		return
+	}
+	code, name, city, lat, lng := s.lookup(ip)
+	if code == "" {
+		code = "XX"
+		name = "Unknown"
+	}
+	if lat == 0 && lng == 0 && code != "XX" {
+		lat, lng = countryCentroid(code)
+	}
+	source := filepath.Join(s.dataDir, "logs", "panel_access.log")
+	hit := models.TrafficHit{
+		CreatedAt:   time.Now(),
+		IP:          ip,
+		CountryCode: code,
+		CountryName: mapCountryName(code, name),
+		City:        city,
+		Latitude:    lat,
+		Longitude:   lng,
+		Bytes:       bytes,
+		Status:      status,
+		Method:      method,
+		Path:        truncate(path, 500),
+		Host:        "panel",
+		Referer:     truncate(referer, 500),
+		UserAgent:   truncate(userAgent, 500),
+		LogSource:   source,
+	}
+	if err := s.db.Create(&hit).Error; err != nil {
+		return
+	}
+	s.mapCacheMu.Lock()
+	s.mapCache = make(map[int]trafficMapCacheEntry)
+	s.mapCacheMu.Unlock()
 }
 
 func (s *Service) dedupeTrafficHits() {
@@ -268,9 +323,13 @@ func (s *Service) logPaths() []string {
 			add(filepath.Join(logDir, e.Name()))
 		}
 	}
+	add(filepath.Join(s.dataDir, "logs", "panel_access.log"))
 	add(filepath.Join(s.dataDir, "logs", "access.log"))
+	add(filepath.Join(s.dataDir, "server", "nginx", "logs", "access.log"))
+	add(filepath.Join(s.dataDir, "server", "openresty", "nginx", "logs", "access.log"))
 	add("/var/log/nginx/access.log")
 	add("/usr/local/nginx/logs/access.log")
+	add("/usr/local/openresty/nginx/logs/access.log")
 	return paths
 }
 
@@ -297,7 +356,14 @@ func (s *Service) ingestFile(path string) {
 	s.mu.Unlock()
 
 	if !known {
-		offset = st.Size()
+		if st.Size() <= maxInitialIngestBytes {
+			offset = 0
+		} else {
+			offset = st.Size() - tailIngestBytes
+			if offset < 0 {
+				offset = 0
+			}
+		}
 	} else if offset > st.Size() {
 		offset = 0
 	}

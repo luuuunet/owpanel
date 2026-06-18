@@ -9,7 +9,7 @@ PANEL_USER="${PANEL_USER:-root}"
 FROM_SOURCE="${FROM_SOURCE:-0}"
 REPO_URL="${REPO_URL:-https://github.com/luuuunet/open-panel.git}"
 SOURCE_REF="${SOURCE_REF:-v0.1.1}"
-RELEASE_VERSION="${RELEASE_VERSION:-v0.1.4}"
+RELEASE_VERSION="${RELEASE_VERSION:-v0.1.5}"
 RELEASE_DIR="${RELEASE_DIR:-}"
 
 export GIT_TERMINAL_PROMPT=0
@@ -384,7 +384,7 @@ print_install_summary() {
 main() {
   echo "========================================="
   echo "  Open Panel Linux Installer"
-  echo "  installer: 2026-06-13-7"
+  echo "  installer: 2026-06-13-8"
   echo "========================================="
   require_root
   detect_os

@@ -1394,7 +1394,7 @@ export default {
     installGeoSuccess: 'GeoIP 庫安裝成功',
     installGeoFailed: 'GeoIP 庫安裝失敗',
     emptyHint: '暫無訪問數據',
-    emptyDetail: '請確保網站已開啓訪問日誌，並在 緩存&安全 → GeoIP 中安裝 GeoLite2 數據庫。數據每 15 秒從站點 access.log 同步。',
+    emptyDetail: 'GeoIP 會在首次啓動時自動安裝。面板與網站訪問日誌約每 30 秒同步一次。建立網站並接收公網訪問後即有數據，或刷新儀表盤後稍等片刻。',
     mapInteractHint: '滾輪縮放 · 拖拽平移 · 懸停查看國家數據 · 點擊查看詳情',
     geo: {
       drawerTitle: '{country} 訪問詳情',

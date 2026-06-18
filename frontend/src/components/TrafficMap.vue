@@ -31,6 +31,7 @@ const mapCanvasHeight = ref(360)
 const mapReady = ref(false)
 const loading = ref(true)
 const installingGeo = ref(false)
+const autoGeoAttempted = ref(false)
 const data = ref<any>(null)
 const range = ref(props.hours)
 const geoDrawerVisible = ref(false)
@@ -101,6 +102,10 @@ async function loadData() {
     if (props.dashboard) params.live = 1
     const res: any = await api.get('/analytics/traffic-map', { params })
     data.value = res.data
+    if (!data.value?.total_requests && !data.value?.geo_db_ready && !installingGeo.value && !autoGeoAttempted.value) {
+      autoGeoAttempted.value = true
+      await installGeoIP()
+    }
   } finally {
     loading.value = false
   }
@@ -300,6 +305,12 @@ onUnmounted(() => {
               <ul v-if="data?.log_paths?.length" class="log-list">
                 <li v-for="p in data.log_paths.slice(0, 4)" :key="p">{{ p }}</li>
               </ul>
+              <div class="empty-actions">
+                <el-button v-if="!data?.geo_db_ready" type="primary" :loading="installingGeo" @click="installGeoIP">
+                  {{ t('traffic.installGeo') }}
+                </el-button>
+                <el-button @click="loadData">{{ t('common.refresh') }}</el-button>
+              </div>
             </template>
           </el-empty>
         </div>
@@ -433,6 +444,12 @@ onUnmounted(() => {
   margin: 8px 0;
   max-width: 360px;
   text-align: center;
+}
+.empty-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
 }
 .log-list {
   text-align: left;

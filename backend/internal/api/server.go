@@ -366,7 +366,8 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 func (s *Server) Run() error {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(gin.Recovery())
+	r.Use(middleware.PanelAccessLog(s.cfg.DataDir, s.analytics.RecordHTTPAccess))
 	r.Use(middleware.SecurityHeaders(func() bool {
 		all, err := s.settings.GetAll()
 		if err != nil {

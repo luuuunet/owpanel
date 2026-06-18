@@ -1424,7 +1424,7 @@ export default {
     installGeoSuccess: 'GeoIP database installed',
     installGeoFailed: 'Failed to install GeoIP database',
     emptyHint: 'No visit data yet',
-    emptyDetail: 'Enable access logs for your sites and install GeoLite2 under Cache & Security → GeoIP. Logs sync every 15 seconds.',
+    emptyDetail: 'GeoIP installs automatically on first run. Panel and website access logs sync every 30 seconds. Create a site and receive public traffic, or refresh after browsing the dashboard.',
     mapInteractHint: 'Scroll to zoom · drag to pan · hover for country stats · click for details',
     geo: {
       drawerTitle: '{country} access details',
