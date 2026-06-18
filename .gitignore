@@ -45,10 +45,8 @@ backend/op-linux-amd64
 backend/op
 owpanel-linux
 owpanel-linux-amd64
-open-panel-linux
-open-panel-linux-amd64
 backend/server
-backend/open-panel-linux-amd64
+backend/owpanel-linux-amd64
 
 # Deploy secrets
 scripts/deploy.env

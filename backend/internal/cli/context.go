@@ -78,6 +78,11 @@ func ensurePanelEnv() {
 	unit := filepath.Join("/etc/systemd/system", serviceName()+".service")
 	data, err := os.ReadFile(unit)
 	if err != nil {
+		if legacy, lerr := os.ReadFile("/etc/systemd/system/open-panel.service"); lerr == nil {
+			data = legacy
+		}
+	}
+	if err != nil && len(data) == 0 {
 		for _, legacy := range []struct{ home, data string }{
 			{"/opt/owpanel", "/opt/owpanel/data"},
 			{"/opt/open-panel", "/opt/open-panel/data"},
