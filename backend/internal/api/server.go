@@ -430,6 +430,7 @@ func (s *Server) Run() error {
 	go s.startAutomationScheduler()
 	go s.runInitialSecurityBootstrap()
 	go bootstrap.Host(s.appstore, s.webserver, s.settings, s.cfg.DataDir)
+	go s.appstore.WarmStoreCatalog()
 	s.emitExtension(extension.EventPanelStartup, map[string]interface{}{"version": "owpanel"})
 	return r.Run(addr)
 }

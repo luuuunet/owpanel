@@ -395,10 +395,26 @@ func (s *Service) SyncCatalog() int {
 	s.catalogMu.Lock()
 	defer s.catalogMu.Unlock()
 	s.syncCatalogLocked()
-	s.catalogSyncedAt = time.Now()
-	var n int64
-	s.db.Model(&models.App{}).Count(&n)
-	return int(n)
+	if s.catalogRowCount() > 0 {
+		s.catalogSyncedAt = time.Now()
+	}
+	return int(s.catalogRowCount())
+}
+
+// WarmStoreCatalog ensures the built-in catalog is seeded and refreshes upstream version metadata after startup.
+func (s *Service) WarmStoreCatalog() {
+	time.Sleep(2 * time.Second)
+	n := s.SyncCatalog()
+	if n == 0 {
+		log.Println("[appstore] catalog empty after startup — retrying sync")
+		n = s.SyncCatalog()
+	}
+	if n > 0 {
+		log.Printf("[appstore] store catalog ready (%d apps)", n)
+	}
+	if _, err := s.RefreshStoreVersions(); err != nil {
+		log.Printf("[appstore] warm refresh store versions: %v", err)
+	}
 }
 
 type PHPVersionInfo struct {
@@ -1101,12 +1117,20 @@ func (s *Service) ensureCatalog() {
 		dbmigrate.MigrateAppsKeyColumn(s.db)
 	}
 	s.syncCatalogLocked()
-	var count int64
-	_ = s.db.Model(&models.App{}).Count(&count)
+	count := s.catalogRowCount()
 	if count == 0 {
 		s.syncCatalogLocked()
+		count = s.catalogRowCount()
 	}
-	s.catalogSyncedAt = time.Now()
+	if count > 0 {
+		s.catalogSyncedAt = time.Now()
+	}
+}
+
+func (s *Service) catalogRowCount() int64 {
+	var count int64
+	_ = s.db.Model(&models.App{}).Count(&count)
+	return count
 }
 
 func (s *Service) forceResyncCatalog() {
@@ -1114,7 +1138,9 @@ func (s *Service) forceResyncCatalog() {
 	defer s.catalogMu.Unlock()
 	s.catalogSyncedAt = time.Time{}
 	s.syncCatalogLocked()
-	s.catalogSyncedAt = time.Now()
+	if s.catalogRowCount() > 0 {
+		s.catalogSyncedAt = time.Now()
+	}
 }
 
 func (s *Service) findCatalogApp(key string) (models.App, error) {

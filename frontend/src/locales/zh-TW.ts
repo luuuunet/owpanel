@@ -963,6 +963,7 @@ export default {
     searchPlaceholder: '搜索軟件，如 Node.js、Ollama…',
     emptySearch: '未找到匹配的軟件',
     storeLoadFailed: '軟件列表載入失敗，請刷新頁面或重啟面板服務',
+    storeInitializing: '正在自動初始化軟件列表，請稍候…',
     total: '共 {n} 個',
     refreshVersions: '更新版本列表',
     versionsRefreshed: '版本列表已更新',

@@ -29,7 +29,16 @@ func Host(apps *appstore.Service, ws *webserver.Manager, settingsSvc *settings.S
 
 	TuneMemory(settingsSvc)
 	ensureDataLayout(dataDir)
-	apps.SyncCatalog()
+	if n := apps.SyncCatalog(); n > 0 {
+		log.Printf("[bootstrap] software store catalog ready (%d apps)", n)
+	} else {
+		log.Println("[bootstrap] software store catalog empty — will retry on next sync")
+	}
+	go func() {
+		if _, err := apps.RefreshStoreVersions(); err != nil {
+			log.Printf("[bootstrap] refresh store versions: %v", err)
+		}
+	}()
 	apps.ReconcileInstalledFromSystem()
 
 	if ws != nil && runtime.GOOS == "linux" {

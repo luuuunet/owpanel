@@ -974,6 +974,7 @@ export default {
     searchPlaceholder: 'Search apps, e.g. Node.js, Ollama…',
     emptySearch: 'No matching software found',
     storeLoadFailed: 'Failed to load the software store. Refresh the page or restart the panel service.',
+    storeInitializing: 'Initializing the software store automatically…',
     total: 'Total {n}',
     refreshVersions: 'Update Version List',
     versionsRefreshed: 'Version list updated',

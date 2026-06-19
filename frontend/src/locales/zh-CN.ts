@@ -977,6 +977,7 @@ export default {
     searchPlaceholder: '搜索软件，如 Node.js、Ollama…',
     emptySearch: '未找到匹配的软件',
     storeLoadFailed: '软件列表加载失败，请刷新页面或重启面板服务',
+    storeInitializing: '正在自动初始化软件列表，请稍候…',
     total: '共 {n} 个',
     refreshVersions: '更新版本列表',
     versionsRefreshed: '版本列表已更新',

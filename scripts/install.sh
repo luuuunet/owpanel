@@ -263,6 +263,23 @@ EOF
   systemctl restart owpanel
 }
 
+wait_for_store_catalog() {
+  local db="$INSTALL_DIR/data/panel.db" n=0
+  log "等待软件商店目录初始化..."
+  for _ in $(seq 1 45); do
+    if [[ -f "$db" ]]; then
+      n="$(sqlite3 "$db" 'SELECT COUNT(*) FROM apps WHERE deleted_at IS NULL;' 2>/dev/null || echo 0)"
+      if [[ "${n:-0}" -ge 50 ]]; then
+        log "软件商店已就绪（${n} 个软件）"
+        return 0
+      fi
+    fi
+    sleep 2
+  done
+  log "软件商店仍在后台初始化，首次打开面板时会自动同步"
+  return 1
+}
+
 install_from_release() {
   local src="${RELEASE_DIR:-}"
   if [[ -z "$src" ]]; then
@@ -648,6 +665,7 @@ main() {
   fi
   install_binary_layout
   write_systemd
+  wait_for_store_catalog || true
   install_runtime_stack
   open_firewall
   print_install_summary

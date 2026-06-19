@@ -32,6 +32,7 @@ const keyword = ref('')
 const loading = ref(false)
 const storeLoadFailed = ref(false)
 const refreshingVersions = ref(false)
+const initializingStore = ref(false)
 
 const installDialog = ref(false)
 const upgradeDialog = ref(false)
@@ -147,11 +148,37 @@ async function refreshStoreVersions() {
   }
 }
 
+async function ensureStoreCatalog() {
+  if (storeApps.value.length > 0 || storeLoadFailed.value) return
+  initializingStore.value = true
+  try {
+    for (let attempt = 0; attempt < 3 && storeApps.value.length === 0; attempt++) {
+      try {
+        await api.post('/software/store/sync')
+      } catch {
+        /* sync may fail on older backends — fall back to version refresh */
+      }
+      try {
+        await api.post('/software/store/refresh-versions')
+      } catch {
+        /* best effort */
+      }
+      await loadStore()
+      if (storeApps.value.length === 0 && attempt < 2) {
+        await new Promise(resolve => setTimeout(resolve, 1500))
+      }
+    }
+  } finally {
+    initializingStore.value = false
+  }
+}
+
 async function loadAll() {
   loading.value = true
   try {
     await Promise.all([loadStore(), loadInstalled()])
-    if (!versionsRefreshedThisSession.value) {
+    await ensureStoreCatalog()
+    if (!versionsRefreshedThisSession.value && storeApps.value.length > 0) {
       versionsRefreshedThisSession.value = true
       api.post('/software/store/refresh-versions').then(() => loadStore()).catch(() => {})
     }
@@ -362,6 +389,8 @@ onMounted(loadAll)
       </div>
     </div>
 
+    <el-alert v-if="initializingStore" type="info" show-icon :closable="false" :title="t('software.storeInitializing')" style="margin-bottom: 16px" />
+
     <el-alert :title="t('software.dockerHint')" type="info" show-icon :closable="false" style="margin-bottom: 16px" />
 
     <el-alert v-if="normalizeStoreCategory(category) === '邮件'" :title="t('software.mailCategoryHint')" type="info" show-icon :closable="false" style="margin-bottom: 16px" />
@@ -373,7 +402,7 @@ onMounted(loadAll)
         <el-radio-group v-model="category" style="margin-bottom: 16px">
           <el-radio-button v-for="c in categories" :key="c" :value="c">{{ catLabel(c) }}</el-radio-button>
         </el-radio-group>
-        <el-row :gutter="16">
+        <el-row v-loading="loading || initializingStore" :gutter="16">
           <el-col v-for="app in paginatedStore" :key="app.grouped ? app.family_key || app.key : app.key" :span="6" style="margin-bottom: 16px">
             <el-card shadow="hover" class="soft-card" :class="{ installed: app.installed }">
               <div class="soft-top">

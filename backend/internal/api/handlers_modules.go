@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -23,6 +24,7 @@ func (s *Server) registerModuleRoutes(authorized *gin.RouterGroup) {
 func (s *Server) registerSoftwareRoutes(authorized *gin.RouterGroup) {
 	authorized.GET("/apps", s.handleListApps)
 	authorized.GET("/software/store", s.handleListApps)
+	authorized.POST("/software/store/sync", s.handleSyncStoreCatalog)
 	authorized.POST("/software/store/refresh-versions", s.handleRefreshStoreVersions)
 	authorized.GET("/software/installed", s.handleListInstalledSoftware)
 	authorized.GET("/software/:key/install/logs", s.handleGetSoftwareInstallLogs)
@@ -109,6 +111,20 @@ func (s *Server) handleListApps(c *gin.Context) {
 		return
 	}
 	response.OK(c, s.enrichSoftwareApps(list))
+}
+
+func (s *Server) handleSyncStoreCatalog(c *gin.Context) {
+	n := s.appstore.SyncCatalog()
+	list, err := s.appstore.List()
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.OK(c, gin.H{
+		"count":   n,
+		"listed":  len(list),
+		"message": fmt.Sprintf("软件商店已同步 %d 个软件", len(list)),
+	})
 }
 
 func (s *Server) handleRefreshStoreVersions(c *gin.Context) {
