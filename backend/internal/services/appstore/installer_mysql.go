@@ -82,18 +82,14 @@ func installMySQLApt(version, installPath, dataDir string) error {
 	}
 
 	if err := setupMySQLAptRepo(version); err != nil {
-		if version == "8.0" {
-			logInstallLine("Oracle MySQL APT 仓库配置失败，回退到发行版 mysql-server …")
-			pkgs = []string{"mysql-server", "mysql-client"}
-		} else {
-			return fmt.Errorf("配置 MySQL APT 仓库: %w", err)
-		}
+		return fmt.Errorf("配置 Oracle MySQL 官方源失败（Debian/Ubuntu 已移除 mysql-server 包，不能从默认源安装）: %w。建议改用软件商店中的 MariaDB，或检查网络/DNS 后重试", err)
 	}
 
+	presetMySQLCommunityDebconf()
 	if err := aptInstallNonInteractive(pkgs...); err != nil {
 		return fmt.Errorf("安装 MySQL %s: %w", version, err)
 	}
-	return startMySQLService("mysql")
+	return startMySQLServiceLinux()
 }
 
 func installMySQLRpm(version string) error {
@@ -157,24 +153,135 @@ func mysqlAptServerSelect(version string) string {
 }
 
 func setupMySQLAptRepo(version string) error {
-	if fileExists("/etc/apt/sources.list.d/mysql.list") || fileExists("/etc/apt/sources.list.d/mysql-community.list") {
+	if mysqlAptRepoConfigured() {
 		return runCommand("apt-get", "update", "-qq")
 	}
-	if _, err := exec.LookPath("wget"); err != nil {
-		return fmt.Errorf("wget 不可用")
+	if err := installMySQLAptPrereqs(); err != nil {
+		return fmt.Errorf("安装依赖: %w", err)
 	}
 	debPath := filepath.Join(os.TempDir(), "mysql-apt-config.deb")
-	if err := runCommand("wget", "-O", debPath, "https://dev.mysql.com/get/mysql-apt-config_0.8.29-1_all.deb"); err != nil {
+	if err := downloadMySQLAptConfig(debPath); err != nil {
 		return err
 	}
-	selectServer := mysqlAptServerSelect(version)
-	_ = runCommand("debconf-set-selections", fmt.Sprintf("mysql-apt-config mysql-apt-config/select-server select %s", selectServer))
-	_ = runCommand("debconf-set-selections", "mysql-apt-config mysql-apt-config/select-product select Ok")
-	_ = runCommand("debconf-set-selections", "mysql-apt-config mysql-apt-config/select-tools select Enabled")
-	if err := runCommand("dpkg", "-i", debPath); err != nil {
+	presetMySQLAptConfigDebconf(version)
+	if err := dpkgInstallNonInteractive(debPath); err != nil {
 		return err
 	}
 	return runCommand("apt-get", "update", "-qq")
+}
+
+func mysqlAptRepoConfigured() bool {
+	if fileExists("/etc/apt/sources.list.d/mysql.list") || fileExists("/etc/apt/sources.list.d/mysql-community.list") {
+		return true
+	}
+	dir := "/etc/apt/sources.list.d"
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		name := strings.ToLower(e.Name())
+		if strings.Contains(name, "mysql") {
+			return true
+		}
+	}
+	return false
+}
+
+func installMySQLAptPrereqs() error {
+	return aptInstallNonInteractive(
+		"ca-certificates", "curl", "wget", "gnupg", "lsb-release",
+		"debconf", "debconf-utils", "apt-transport-https",
+	)
+}
+
+func downloadMySQLAptConfig(dest string) error {
+	urls := []string{
+		"https://dev.mysql.com/get/mysql-apt-config",
+		"https://repo.mysql.com/mysql-apt-config_0.8.29-1_all.deb",
+	}
+	var lastErr error
+	for _, u := range urls {
+		if _, err := exec.LookPath("curl"); err == nil {
+			if err := runCommand("curl", "-fsSL", "-o", dest, u); err == nil {
+				return nil
+			} else {
+				lastErr = err
+			}
+		}
+		if _, err := exec.LookPath("wget"); err == nil {
+			if err := runCommand("wget", "-O", dest, u); err == nil {
+				return nil
+			} else {
+				lastErr = err
+			}
+		}
+	}
+	if lastErr != nil {
+		return fmt.Errorf("下载 mysql-apt-config: %w", lastErr)
+	}
+	return fmt.Errorf("curl/wget 不可用，无法下载 MySQL 官方源配置包")
+}
+
+func presetMySQLAptConfigDebconf(version string) {
+	selectServer := mysqlAptServerSelect(version)
+	selections := []string{
+		fmt.Sprintf("mysql-apt-config mysql-apt-config/select-server select %s", selectServer),
+		"mysql-apt-config mysql-apt-config/select-product select Ok",
+		"mysql-apt-config mysql-apt-config/select-tools select Enabled",
+	}
+	for _, line := range selections {
+		debconfSet(line)
+	}
+}
+
+func presetMySQLCommunityDebconf() {
+	selections := []string{
+		"mysql-community-server mysql-community-server/root-pass password owpanel",
+		"mysql-community-server mysql-community-server/re-root-pass password owpanel",
+	}
+	for _, line := range selections {
+		debconfSet(line)
+	}
+}
+
+func debconfSet(selection string) {
+	cmd := exec.Command("debconf-set-selections")
+	cmd.Stdin = strings.NewReader(selection + "\n")
+	_ = cmd.Run()
+}
+
+func dpkgInstallNonInteractive(debPath string) error {
+	cmd := exec.Command("dpkg", "-i", debPath)
+	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+	logKey := installLogKeyForGoroutine()
+	logInstallLineKey(logKey, fmt.Sprintf("$ DEBIAN_FRONTEND=noninteractive dpkg -i %s", debPath))
+	out, err := cmd.CombinedOutput()
+	text := strings.TrimSpace(string(out))
+	if text != "" {
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				logInstallLineKey(logKey, line)
+			}
+		}
+	}
+	if err != nil {
+		if text != "" {
+			return fmt.Errorf("%v: %s", err, text)
+		}
+		return err
+	}
+	return nil
+}
+
+func startMySQLServiceLinux() error {
+	for _, svc := range []string{"mysql", "mysqld"} {
+		if err := startMySQLService(svc); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("MySQL 已安装但无法启动服务（尝试了 mysql / mysqld）")
 }
 
 func setupMySQLRpmRepo(version string) error {
