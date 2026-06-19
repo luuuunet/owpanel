@@ -153,7 +153,7 @@ func (s *Service) ListWebsiteAudits() *WebsiteAuditListResponse {
 		}
 		out.AvgScore += r.Score
 	}
-	s.auditStore.mu.Unlock()
+	s.auditStore.mu.RUnlock()
 
 	out.Total = len(out.Items)
 	if out.Total > 0 {
