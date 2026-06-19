@@ -20,6 +20,8 @@ func (s *Server) registerAutoOpsRoutes(authorized *gin.RouterGroup) {
 	authorized.POST("/auto-ops/website-scan", s.handleAutoOpsWebsiteScanAll)
 	authorized.PATCH("/auto-ops/watch/:key", s.handleAutoOpsWatch)
 	authorized.POST("/auto-ops/watch/bulk", s.handleAutoOpsWatchBulk)
+	authorized.POST("/auto-ops/presets/site", s.handleAutoOpsPresetSite)
+	authorized.POST("/auto-ops/presets/ops", s.handleAutoOpsPresetOps)
 }
 
 func (s *Server) handleAutoOpsOverview(c *gin.Context) {
@@ -142,6 +144,43 @@ func (s *Server) handleAutoOpsWatchBulk(c *gin.Context) {
 		return
 	}
 	if err := s.autops.BulkUpdateWatch(body.Keys, body.WatchEnabled, body.AutoRestart); err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.Message(c, "updated")
+}
+
+func (s *Server) handleAutoOpsPresetSite(c *gin.Context) {
+	autopsRes, err := s.autops.ApplySitePreset()
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	uptimeRes, err := s.uptime.ImportFromWebsites(300)
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	webBackup, err := s.backup.ApplyPreset("websites", "0 2 * * *")
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	dbBackup, err := s.backup.ApplyPreset("databases", "0 3 * * *")
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.OK(c, gin.H{
+		"autops":           autopsRes,
+		"uptime":           uptimeRes,
+		"backup_websites":  webBackup,
+		"backup_databases": dbBackup,
+	})
+}
+
+func (s *Server) handleAutoOpsPresetOps(c *gin.Context) {
+	if err := s.autops.ApplyOpsPreset(); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}

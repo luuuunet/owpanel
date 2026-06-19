@@ -13,6 +13,12 @@ const ossList = ref<any[]>([])
 const websites = ref<any[]>([])
 const databases = ref<any[]>([])
 const dialogVisible = ref(false)
+const applyingPreset = ref('')
+
+const quickTemplates = [
+  { key: 'websites', title: 'backup.templateAllSites', desc: 'backup.templateAllSitesDesc', schedule: '0 2 * * *', icon: '🌐' },
+  { key: 'databases', title: 'backup.templateAllDbs', desc: 'backup.templateAllDbsDesc', schedule: '0 3 * * *', icon: '🗄️' },
+]
 
 const form = ref({
   name: '',
@@ -58,6 +64,20 @@ async function load() {
   ossList.value = oss.data || []
   websites.value = sites.data || []
   databases.value = dbs.data || []
+}
+
+async function applyPreset(key: string, schedule: string) {
+  applyingPreset.value = key
+  try {
+    const res: any = await api.post('/backup/presets', { preset: key, schedule })
+    const d = res.data || {}
+    ElMessage.success(t('backup.presetApplied', { created: d.created || 0, skipped: d.skipped || 0 }))
+    await load()
+  } catch (e: any) {
+    ElMessage.error(e?.error || e?.message || t('common.failed'))
+  } finally {
+    applyingPreset.value = ''
+  }
 }
 
 async function handleCreate() {
@@ -117,15 +137,36 @@ onMounted(load)
 <template>
   <div>
     <div class="page-header">
-      <h2>{{ t('backup.title') }}</h2>
-      <el-button v-if="tab === 'tasks'" type="primary" @click="dialogVisible = true">{{ t('backup.add') }}</el-button>
-      <el-button v-if="tab === 'remotes'" type="primary" @click="remoteDialog = true">{{ t('backup.addRemote') }}</el-button>
+      <div>
+        <h2>{{ t('backup.title') }}</h2>
+        <p class="subtitle">{{ t('backup.subtitle') }}</p>
+      </div>
+      <div class="header-actions">
+        <el-button v-if="tab === 'tasks'" type="primary" @click="dialogVisible = true">{{ t('backup.add') }}</el-button>
+        <el-button v-if="tab === 'remotes'" type="primary" @click="remoteDialog = true">{{ t('backup.addRemote') }}</el-button>
+      </div>
     </div>
 
-    <el-alert type="info" :closable="false" show-icon class="hint">{{ t('backup.hint') }}</el-alert>
+    <el-alert type="info" :closable="false" show-icon class="hint">
+      <template #title>{{ t('backup.whatIsTitle') }}</template>
+      <template #default>{{ t('backup.whatIsBody') }}</template>
+    </el-alert>
 
     <el-tabs v-model="tab">
       <el-tab-pane :label="t('backup.tabTasks')" name="tasks">
+        <h3 class="section-title">{{ t('backup.quickTitle') }}</h3>
+        <div class="template-grid">
+          <el-card v-for="tpl in quickTemplates" :key="tpl.key" shadow="never" class="template-card">
+            <div class="template-head">
+              <span class="template-icon">{{ tpl.icon }}</span>
+              <strong>{{ t(tpl.title) }}</strong>
+            </div>
+            <p class="template-desc">{{ t(tpl.desc) }}</p>
+            <el-button type="primary" size="small" :loading="applyingPreset === tpl.key" @click="applyPreset(tpl.key, tpl.schedule)">
+              {{ t('backup.templateApply') }}
+            </el-button>
+          </el-card>
+        </div>
         <el-table :data="list" stripe>
           <el-table-column prop="name" :label="t('common.name')" width="140" />
           <el-table-column prop="type" :label="t('common.type')" width="100" />
@@ -249,6 +290,14 @@ onMounted(load)
 </template>
 
 <style scoped>
+.subtitle { margin: 4px 0 0; font-size: 13px; color: var(--el-text-color-secondary); }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .hint { margin-bottom: 16px; }
+.section-title { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.template-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.template-card { border: 1px solid var(--el-border-color-lighter); }
+.template-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.template-icon { font-size: 22px; }
+.template-desc { margin: 0 0 12px; font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.5; }
 .preset-row { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
 </style>

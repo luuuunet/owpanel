@@ -108,13 +108,15 @@ MySQL/MariaDB, PostgreSQL (with extensions), Redis:
 
 ## 9. Automation & Monitoring
 
+> **Beginner guide with cloud comparison:** see [AUTOMATION.md](./AUTOMATION.md)
+
 | Module | Purpose |
 |--------|---------|
-| **Cron** | scheduled tasks, templates, logs, manual run |
-| **Backup** | sites, DBs, paths → local / FTP / SFTP / WebDAV / OSS |
-| **Uptime** | HTTP(S) probes |
-| **Auto Ops** | runbooks and automation history |
-| **Cluster** | multi-node agents, centralized status |
+| **Auto Ops** | Hub: comparison vs aaPanel/1Panel/Alibaba/AWS/GCP, one-click site protection, service watch, website audit, webhooks |
+| **Cron** | Scheduled tasks, built-in templates, logs, manual run |
+| **Backup** | Sites, DBs, paths → local / FTP / SFTP / WebDAV / OSS; quick templates **backup all sites/DBs** |
+| **Uptime** | HTTP(S) probes; **import from websites** one-click |
+| **Cluster** | Multi-node agents, centralized status |
 | **DevOps** | CI/CD hooks (admin) |
 
 ---

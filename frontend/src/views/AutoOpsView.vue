@@ -110,22 +110,50 @@ const beginnerPaths = computed(() => [
       { text: t('autoOps.pathContainer4'), path: '/cluster' },
     ],
   },
+  {
+    key: 'cloud',
+    icon: '☁️',
+    title: t('autoOps.pathCloudTitle'),
+    desc: t('autoOps.pathCloudDesc'),
+    steps: [
+      { text: t('autoOps.pathCloud1'), path: '/auto-ops', tab: 'guide' },
+      { text: t('autoOps.pathCloud2'), path: '/auto-ops', tab: 'settings' },
+      { text: t('autoOps.pathCloud3'), path: '/backup' },
+      { text: t('autoOps.pathCloud4'), path: '/uptime' },
+      { text: t('autoOps.pathCloud5'), path: '/cron' },
+    ],
+  },
 ])
 
 const compareRows = computed(() => [
-  { feature: t('autoOps.cmpServiceWatch'), ow: true, bt: true, op: true },
-  { feature: t('autoOps.cmpSslRenew'), ow: true, bt: true, op: true },
-  { feature: t('autoOps.cmpBackup'), ow: true, bt: true, op: true },
-  { feature: t('autoOps.cmpCron'), ow: true, bt: true, op: true },
-  { feature: t('autoOps.cmpWebsiteAudit'), ow: true, bt: false, op: false },
-  { feature: t('autoOps.cmpUptime'), ow: true, bt: true, op: true },
-  { feature: t('autoOps.cmpK8s'), ow: true, bt: false, op: true },
-  { feature: t('autoOps.cmpAbTest'), ow: true, bt: false, op: false },
-  { feature: t('autoOps.cmpDevops'), ow: true, bt: false, op: false },
-  { feature: t('autoOps.cmpMemRelief'), ow: true, bt: false, op: false },
-  { feature: t('autoOps.cmpWebhook'), ow: true, bt: true, op: true },
-  { feature: t('autoOps.cmpHooks'), ow: true, bt: true, op: false },
+  { feature: t('autoOps.cmpResourceMonitor'), ow: true, bt: true, op: true, ali: true, aws: true, gcp: true },
+  { feature: t('autoOps.cmpMetricAlarm'), ow: true, bt: true, op: true, ali: true, aws: true, gcp: true },
+  { feature: t('autoOps.cmpServiceWatch'), ow: true, bt: true, op: true, ali: 'partial', aws: 'partial', gcp: 'partial' },
+  { feature: t('autoOps.cmpSslRenew'), ow: true, bt: true, op: true, ali: true, aws: true, gcp: 'partial' },
+  { feature: t('autoOps.cmpBackup'), ow: true, bt: true, op: true, ali: 'partial', aws: true, gcp: true },
+  { feature: t('autoOps.cmpAutoSnapshot'), ow: true, bt: true, op: true, ali: 'partial', aws: true, gcp: true },
+  { feature: t('autoOps.cmpCron'), ow: true, bt: true, op: true, ali: 'partial', aws: 'partial', gcp: 'partial' },
+  { feature: t('autoOps.cmpUptime'), ow: true, bt: true, op: true, ali: 'partial', aws: 'partial', gcp: true },
+  { feature: t('autoOps.cmpWebsiteAudit'), ow: true, bt: false, op: false, ali: false, aws: false, gcp: false },
+  { feature: t('autoOps.cmpK8s'), ow: true, bt: false, op: true, ali: 'partial', aws: true, gcp: true },
+  { feature: t('autoOps.cmpLoadBalancer'), ow: 'partial', bt: 'partial', op: false, ali: true, aws: true, gcp: true },
+  { feature: t('autoOps.cmpAbTest'), ow: true, bt: false, op: false, ali: false, aws: false, gcp: false },
+  { feature: t('autoOps.cmpDevops'), ow: true, bt: false, op: false, ali: 'partial', aws: true, gcp: true },
+  { feature: t('autoOps.cmpMemRelief'), ow: true, bt: false, op: false, ali: false, aws: false, gcp: false },
+  { feature: t('autoOps.cmpWebhook'), ow: true, bt: true, op: true, ali: true, aws: true, gcp: true },
+  { feature: t('autoOps.cmpCommandRun'), ow: true, bt: true, op: true, ali: true, aws: 'partial', gcp: 'partial' },
+  { feature: t('autoOps.cmpGlobalProbe'), ow: false, bt: false, op: false, ali: false, aws: 'partial', gcp: true },
+  { feature: t('autoOps.cmpHooks'), ow: true, bt: true, op: false, ali: false, aws: 'partial', gcp: 'partial' },
 ])
+
+const compareCols = [
+  { key: 'ow', label: 'autoOps.cmpOw' },
+  { key: 'bt', label: 'autoOps.cmpBt' },
+  { key: 'op', label: 'autoOps.cmpOp' },
+  { key: 'ali', label: 'autoOps.cmpAli' },
+  { key: 'aws', label: 'autoOps.cmpAws' },
+  { key: 'gcp', label: 'autoOps.cmpGcp' },
+]
 
 const glossaryItems = computed(() => [
   { term: t('autoOps.glossaryWatch'), def: t('autoOps.glossaryWatchDef') },
@@ -145,24 +173,16 @@ function goPath(path: string, tabName?: string) {
   router.push(path)
 }
 
-const webStackPattern = /^(nginx|openresty|apache|caddy|mysql|mariadb|postgresql|redis|php|memcached)/i
-
 async function applyBeginnerPreset() {
   applyingPreset.value = 'site'
   try {
-    await api.put('/auto-ops/config', {
-      ...configForm.value,
-      enabled: true,
-      ssl_auto_renew: true,
-      website_scan_enabled: true,
-      alert_days_ssl: 14,
-      alert_days_site: 14,
-    })
-    const keys = watches.value.filter((w: any) => webStackPattern.test(w.key)).map((w: any) => w.key)
-    if (keys.length) {
-      await api.post('/auto-ops/watch/bulk', { keys, watch_enabled: true, auto_restart: true })
-    }
-    ElMessage.success(t('autoOps.presetSiteApplied'))
+    const res: any = await api.post('/auto-ops/presets/site')
+    const d = res.data || {}
+    ElMessage.success(t('autoOps.presetSiteAppliedDetail', {
+      watch: d.autops?.watch_count ?? 0,
+      uptime: d.uptime?.created ?? 0,
+      backup: (d.backup_websites?.created ?? 0) + (d.backup_databases?.created ?? 0),
+    }))
     await load()
     await loadOverview()
     tab.value = 'watch'
@@ -176,19 +196,7 @@ async function applyBeginnerPreset() {
 async function applyOpsPreset() {
   applyingPreset.value = 'ops'
   try {
-    await api.put('/auto-ops/config', {
-      ...configForm.value,
-      enabled: true,
-      resource_enabled: true,
-      cpu_threshold: 85,
-      mem_threshold: 85,
-      disk_threshold: 90,
-      notify_on_down: true,
-      notify_on_fail: true,
-      mem_auto_relief: true,
-      ssl_auto_renew: true,
-      website_scan_enabled: true,
-    })
+    await api.post('/auto-ops/presets/ops')
     ElMessage.success(t('autoOps.presetOpsApplied'))
     await load()
     await loadOverview()
@@ -511,27 +519,24 @@ onUnmounted(() => clearInterval(timer))
 
         <h3 class="section-title">{{ t('autoOps.cmpTitle') }}</h3>
         <p class="section-desc">{{ t('autoOps.cmpDesc') }}</p>
-        <el-table :data="compareRows" stripe class="cmp-table">
-          <el-table-column prop="feature" :label="t('autoOps.cmpFeature')" min-width="200" />
-          <el-table-column :label="t('autoOps.cmpOw')" width="100" align="center">
-            <template #default="{ row }">
-              <el-icon v-if="row.ow" color="var(--el-color-success)"><CircleCheck /></el-icon>
-              <span v-else class="cmp-no">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('autoOps.cmpBt')" width="100" align="center">
-            <template #default="{ row }">
-              <el-icon v-if="row.bt" color="var(--el-color-success)"><CircleCheck /></el-icon>
-              <span v-else class="cmp-no">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('autoOps.cmpOp')" width="100" align="center">
-            <template #default="{ row }">
-              <el-icon v-if="row.op" color="var(--el-color-success)"><CircleCheck /></el-icon>
-              <span v-else class="cmp-no">—</span>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="cmp-wrap">
+          <el-table :data="compareRows" stripe class="cmp-table">
+            <el-table-column prop="feature" :label="t('autoOps.cmpFeature')" min-width="220" fixed />
+            <el-table-column v-for="col in compareCols" :key="col.key" :label="t(col.label)" width="88" align="center">
+              <template #default="{ row }">
+                <el-icon v-if="row[col.key] === true" color="var(--el-color-success)"><CircleCheck /></el-icon>
+                <span v-else-if="row[col.key] === 'partial'" class="cmp-partial" :title="t('autoOps.cmpPartialHint')">~</span>
+                <span v-else class="cmp-no">—</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <p class="cmp-legend">{{ t('autoOps.cmpLegend') }}</p>
+
+        <el-alert type="success" :closable="false" show-icon class="guide-doc">
+          <template #title>{{ t('autoOps.guideDocTitle') }}</template>
+          <template #default>{{ t('autoOps.guideDocBody') }}</template>
+        </el-alert>
 
         <h3 class="section-title">{{ t('autoOps.glossaryTitle') }}</h3>
         <div class="glossary-grid">
@@ -954,8 +959,12 @@ onUnmounted(() => clearInterval(timer))
   line-height: 1.8;
 }
 .path-step-link:hover { text-decoration: underline; }
-.cmp-table { margin-bottom: 8px; }
+.cmp-wrap { overflow-x: auto; margin-bottom: 8px; }
+.cmp-table { min-width: 760px; }
+.cmp-partial { color: var(--el-color-warning); font-weight: 600; }
+.cmp-legend { margin: 0 0 16px; font-size: 12px; color: var(--el-text-color-secondary); }
 .cmp-no { color: var(--el-text-color-placeholder); }
+.guide-doc { margin-bottom: 16px; }
 .glossary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .glossary-item { padding: 12px; border-radius: 8px; background: var(--el-fill-color-light); }
 .glossary-item strong { display: block; margin-bottom: 6px; font-size: 13px; }

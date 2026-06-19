@@ -7,6 +7,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const { t } = useI18n()
 
 const monitors = ref<any[]>([])
+const websites = ref<any[]>([])
+const loading = ref(false)
+const importing = ref(false)
 const dialogVisible = ref(false)
 const form = ref({
   name: '',
@@ -20,9 +23,24 @@ const form = ref({
   enabled: true,
 })
 
+const quickPresets = [
+  { key: 'fast', label: 'uptime.presetFast', interval: 60, desc: 'uptime.presetFastDesc' },
+  { key: 'normal', label: 'uptime.presetNormal', interval: 300, desc: 'uptime.presetNormalDesc' },
+  { key: 'slow', label: 'uptime.presetSlow', interval: 900, desc: 'uptime.presetSlowDesc' },
+]
+
 async function load() {
-  const res: any = await api.get('/uptime')
-  monitors.value = res.data || []
+  loading.value = true
+  try {
+    const [mon, sites]: any[] = await Promise.all([
+      api.get('/uptime'),
+      api.get('/websites').catch(() => ({ data: [] })),
+    ])
+    monitors.value = mon.data || []
+    websites.value = (sites.data || []).filter((w: any) => w.status === 'running')
+  } finally {
+    loading.value = false
+  }
 }
 
 async function handleCreate() {
@@ -34,6 +52,25 @@ async function handleCreate() {
     expected_status: 200, keyword: '', notify_webhook: '', enabled: true,
   }
   load()
+}
+
+async function importWebsites(intervalSec = 300) {
+  importing.value = true
+  try {
+    const res: any = await api.post('/uptime/import-websites', { interval_sec: intervalSec })
+    const d = res.data || {}
+    ElMessage.success(t('uptime.importDone', { created: d.created || 0, skipped: d.skipped || 0 }))
+    await load()
+  } catch (e: any) {
+    ElMessage.error(e?.error || e?.message || t('common.failed'))
+  } finally {
+    importing.value = false
+  }
+}
+
+function openWithPreset(preset: typeof quickPresets[0]) {
+  form.value.interval_sec = preset.interval
+  dialogVisible.value = true
 }
 
 async function handleDelete(id: number) {
@@ -65,13 +102,39 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div v-loading="loading">
     <div class="page-header">
-      <h2>{{ t('uptime.title') }}</h2>
-      <el-button type="primary" @click="dialogVisible = true">{{ t('uptime.add') }}</el-button>
+      <div>
+        <h2>{{ t('uptime.title') }}</h2>
+        <p class="subtitle">{{ t('uptime.subtitle') }}</p>
+      </div>
+      <div class="header-actions">
+        <el-button :loading="importing" :disabled="!websites.length" @click="importWebsites(300)">
+          {{ t('uptime.importWebsites') }}
+        </el-button>
+        <el-button type="primary" @click="dialogVisible = true">{{ t('uptime.add') }}</el-button>
+      </div>
     </div>
 
-    <el-alert type="info" :closable="false" show-icon class="hint">{{ t('uptime.hint') }}</el-alert>
+    <el-alert type="info" :closable="false" show-icon class="hint">
+      <template #title>{{ t('uptime.whatIsTitle') }}</template>
+      <template #default>{{ t('uptime.whatIsBody') }}</template>
+    </el-alert>
+
+    <h3 class="section-title">{{ t('uptime.quickTitle') }}</h3>
+    <div class="preset-grid">
+      <el-card shadow="never" class="preset-card preset-card--action" @click="importWebsites(300)">
+        <div class="preset-name">{{ t('uptime.importWebsites') }}</div>
+        <p class="preset-desc">{{ t('uptime.importWebsitesDesc', { n: websites.length }) }}</p>
+        <el-button type="primary" size="small" :loading="importing" :disabled="!websites.length">
+          {{ t('uptime.importBtn') }}
+        </el-button>
+      </el-card>
+      <el-card v-for="p in quickPresets" :key="p.key" shadow="never" class="preset-card" @click="openWithPreset(p)">
+        <div class="preset-name">{{ t(p.label) }}</div>
+        <p class="preset-desc">{{ t(p.desc) }}</p>
+      </el-card>
+    </div>
 
     <el-table :data="monitors" stripe>
       <el-table-column prop="name" :label="t('uptime.name')" width="140" />
@@ -103,6 +166,9 @@ onMounted(load)
         </template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!monitors.length" :description="t('uptime.empty')">
+      <el-button type="primary" :disabled="!websites.length" @click="importWebsites(300)">{{ t('uptime.importWebsites') }}</el-button>
+    </el-empty>
 
     <el-dialog v-model="dialogVisible" :title="t('uptime.addTitle')" width="560px">
       <el-form :model="form" label-width="120px">
@@ -125,5 +191,14 @@ onMounted(load)
 </template>
 
 <style scoped>
+.subtitle { margin: 4px 0 0; font-size: 13px; color: var(--el-text-color-secondary); }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .hint { margin-bottom: 16px; }
+.section-title { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.preset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.preset-card { cursor: pointer; border: 1px solid var(--el-border-color-lighter); transition: border-color 0.15s; }
+.preset-card:hover { border-color: var(--el-color-primary-light-5); }
+.preset-card--action { cursor: default; }
+.preset-name { font-weight: 600; margin-bottom: 6px; }
+.preset-desc { margin: 0 0 10px; font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.5; }
 </style>

@@ -62,6 +62,7 @@ func (s *Server) registerBackupRoutes(authorized *gin.RouterGroup) {
 	authorized.DELETE("/backup/:id", s.handleDeleteBackup)
 	authorized.PATCH("/backup/:id/toggle", s.handleToggleBackup)
 	authorized.POST("/backup/:id/run", s.handleRunBackupTask)
+	authorized.POST("/backup/presets", s.handleBackupPresets)
 
 	authorized.GET("/backup/remotes", s.handleListBackupRemotes)
 	authorized.POST("/backup/remotes", s.handleCreateBackupRemote)
@@ -528,6 +529,27 @@ func (s *Server) handleRunBackupTask(c *gin.Context) {
 		return
 	}
 	response.Message(c, "started")
+}
+
+func (s *Server) handleBackupPresets(c *gin.Context) {
+	var req struct {
+		Preset   string `json:"preset"`
+		Schedule string `json:"schedule"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, err.Error())
+		return
+	}
+	if req.Preset == "" {
+		response.Error(c, 400, "preset required")
+		return
+	}
+	res, err := s.backup.ApplyPreset(req.Preset, req.Schedule)
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.OK(c, res)
 }
 
 func (s *Server) handleSyncFTP(c *gin.Context) {

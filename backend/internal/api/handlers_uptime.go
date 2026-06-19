@@ -12,6 +12,7 @@ func (s *Server) registerUptimeRoutes(authorized *gin.RouterGroup) {
 	authorized.PATCH("/uptime/:id", s.handleUpdateUptime)
 	authorized.DELETE("/uptime/:id", s.handleDeleteUptime)
 	authorized.POST("/uptime/:id/check", s.handleCheckUptime)
+	authorized.POST("/uptime/import-websites", s.handleUptimeImportWebsites)
 }
 
 func (s *Server) handleListUptime(c *gin.Context) {
@@ -69,4 +70,17 @@ func (s *Server) handleCheckUptime(c *gin.Context) {
 		return
 	}
 	response.OK(c, m)
+}
+
+func (s *Server) handleUptimeImportWebsites(c *gin.Context) {
+	var req struct {
+		IntervalSec int `json:"interval_sec"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	res, err := s.uptime.ImportFromWebsites(req.IntervalSec)
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.OK(c, res)
 }
