@@ -6,15 +6,18 @@ import api from '@/api'
 import { categoryLabel } from '@/locales'
 import SoftwareIcon from '@/components/SoftwareIcon.vue'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Bell, Refresh, Timer, Promotion, Share, FolderOpened, Lock, Document, Box, Histogram, Cpu, Coin, Platform, DataAnalysis } from '@element-plus/icons-vue'
+import { ArrowRight, Bell, Refresh, Timer, Promotion, Share, FolderOpened, Lock, Document, Box, Histogram, Cpu, Coin, Platform, DataAnalysis, CircleCheck } from '@element-plus/icons-vue'
 import { cfTheme } from '@/config/theme'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const auth = useAuthStore()
+const isAdmin = computed(() => !auth.user?.role || auth.user.role === 'admin')
 
 const loading = ref(false)
-const tab = ref('overview')
+const tab = ref(typeof localStorage !== 'undefined' && !localStorage.getItem('autoOpsGuideSeen') ? 'guide' : 'overview')
 const status = ref<any>(null)
 const overview = ref<any>(null)
 const events = ref<any[]>([])
@@ -39,8 +42,10 @@ const configForm = ref({
   alert_days_ssl: 14,
   alert_days_site: 14,
   website_scan_enabled: true,
+  mem_auto_relief: true,
 })
 
+const applyingPreset = ref('')
 const websiteAudits = ref<any>(null)
 const auditDetail = ref<any>(null)
 const auditDrawer = ref(false)
@@ -52,19 +57,148 @@ const websiteAuditItems = computed(() => websiteAudits.value?.items || [])
 const installedCount = computed(() => watches.value.length)
 
 const quickLinks = computed(() => [
-  { path: '/product-analytics', icon: DataAnalysis, title: t('menu.abTesting'), desc: t('autoOps.linkAbTesting'), stat: 'A/B' },
-  { path: '/uptime', icon: Bell, title: t('menu.uptime'), desc: t('autoOps.linkUptime'), stat: overview.value ? `${(overview.value.uptime_total || 0) - (overview.value.uptime_down || 0)}/${overview.value.uptime_total || 0}` : '—' },
-  { path: '/cron', icon: Timer, title: t('menu.cron'), desc: t('autoOps.linkCron'), stat: overview.value ? `${overview.value.cron_enabled || 0}/${overview.value.cron_total || 0}` : '—' },
-  { path: '/backup', icon: FolderOpened, title: t('menu.backup'), desc: t('autoOps.linkBackup'), stat: overview.value ? `${overview.value.backup_enabled || 0}/${overview.value.backup_total || 0}` : '—' },
-  { path: '/devops', icon: Promotion, title: t('menu.devops'), desc: t('autoOps.linkDevops'), stat: 'CI/CD' },
-  { path: '/cluster', icon: Share, title: t('menu.cluster'), desc: t('autoOps.linkCluster'), stat: t('autoOps.multiNode') },
-  { path: '/k8s', icon: Platform, title: t('menu.k8s'), desc: t('autoOps.linkK8s'), stat: overview.value?.k8s_ready ? t('k8s.ready') : (overview.value?.k8s_installed ? t('k8s.notReady') : '—') },
-  { path: '/ssl', icon: Lock, title: t('menu.ssl'), desc: t('autoOps.linkSSL'), stat: overview.value?.ssl_expiring_soon ? t('autoOps.expiringCount', { n: overview.value.ssl_expiring_soon }) : '—' },
-  { path: '/websites', icon: Bell, title: t('menu.website'), desc: t('autoOps.linkSites'), stat: overview.value?.sites_expiring_soon ? t('autoOps.expiringCount', { n: overview.value.sites_expiring_soon }) : '—' },
-  { path: '/logs', icon: Document, title: t('menu.logs'), desc: t('autoOps.linkLogs'), stat: overview.value?.log_auto_cleanup ? t('autoOps.logCleanupOn') : t('autoOps.logCleanupOff') },
-  { path: '/extensions', icon: Box, title: t('menu.extensions'), desc: t('autoOps.linkExtensions'), stat: t('autoOps.hooks') },
-  { path: '/protection', icon: Histogram, title: t('menu.protection'), desc: t('autoOps.linkProtection'), stat: 'WAF' },
+  { path: '/product-analytics', icon: DataAnalysis, title: t('menu.abTesting'), desc: t('autoOps.linkAbTesting'), audience: t('autoOps.audienceProduct'), stat: 'A/B' },
+  { path: '/uptime', icon: Bell, title: t('menu.uptime'), desc: t('autoOps.linkUptime'), audience: t('autoOps.audienceSite'), stat: overview.value ? `${(overview.value.uptime_total || 0) - (overview.value.uptime_down || 0)}/${overview.value.uptime_total || 0}` : '—' },
+  { path: '/cron', icon: Timer, title: t('menu.cron'), desc: t('autoOps.linkCron'), audience: t('autoOps.audienceAll'), stat: overview.value ? `${overview.value.cron_enabled || 0}/${overview.value.cron_total || 0}` : '—' },
+  { path: '/backup', icon: FolderOpened, title: t('menu.backup'), desc: t('autoOps.linkBackup'), audience: t('autoOps.audienceSite'), stat: overview.value ? `${overview.value.backup_enabled || 0}/${overview.value.backup_total || 0}` : '—' },
+  { path: '/devops', icon: Promotion, title: t('menu.devops'), desc: t('autoOps.linkDevops'), audience: t('autoOps.audienceDev'), stat: 'CI/CD', adminOnly: true },
+  { path: '/cluster', icon: Share, title: t('menu.cluster'), desc: t('autoOps.linkCluster'), audience: t('autoOps.audienceOps'), stat: t('autoOps.multiNode') },
+  { path: '/k8s', icon: Platform, title: t('menu.k8s'), desc: t('autoOps.linkK8s'), audience: t('autoOps.audienceContainer'), stat: overview.value?.k8s_ready ? t('k8s.ready') : (overview.value?.k8s_installed ? t('k8s.notReady') : '—'), adminOnly: true },
+  { path: '/ssl', icon: Lock, title: t('menu.ssl'), desc: t('autoOps.linkSSL'), audience: t('autoOps.audienceSite'), stat: overview.value?.ssl_expiring_soon ? t('autoOps.expiringCount', { n: overview.value.ssl_expiring_soon }) : '—' },
+  { path: '/websites', icon: Bell, title: t('menu.website'), desc: t('autoOps.linkSites'), audience: t('autoOps.audienceSite'), stat: overview.value?.sites_expiring_soon ? t('autoOps.expiringCount', { n: overview.value.sites_expiring_soon }) : '—' },
+  { path: '/logs', icon: Document, title: t('menu.logs'), desc: t('autoOps.linkLogs'), audience: t('autoOps.audienceOps'), stat: overview.value?.log_auto_cleanup ? t('autoOps.logCleanupOn') : t('autoOps.logCleanupOff'), adminOnly: true },
+  { path: '/extensions', icon: Box, title: t('menu.extensions'), desc: t('autoOps.linkExtensions'), audience: t('autoOps.audienceDev'), stat: t('autoOps.hooks'), adminOnly: true },
+  { path: '/protection', icon: Histogram, title: t('menu.protection'), desc: t('autoOps.linkProtection'), audience: t('autoOps.audienceSecurity'), stat: 'WAF' },
 ])
+
+const beginnerPaths = computed(() => [
+  {
+    key: 'site',
+    icon: '🌐',
+    title: t('autoOps.pathSiteTitle'),
+    desc: t('autoOps.pathSiteDesc'),
+    steps: [
+      { text: t('autoOps.pathSite1'), path: '/websites' },
+      { text: t('autoOps.pathSite2'), path: '/ssl' },
+      { text: t('autoOps.pathSite3'), path: '/auto-ops', tab: 'watch' },
+      { text: t('autoOps.pathSite4'), path: '/backup' },
+      { text: t('autoOps.pathSite5'), path: '/uptime' },
+    ],
+  },
+  {
+    key: 'ops',
+    icon: '🔧',
+    title: t('autoOps.pathOpsTitle'),
+    desc: t('autoOps.pathOpsDesc'),
+    steps: [
+      { text: t('autoOps.pathOps1'), path: '/auto-ops', tab: 'settings' },
+      { text: t('autoOps.pathOps2'), path: '/auto-ops', tab: 'watch' },
+      { text: t('autoOps.pathOps3'), path: '/cron' },
+      { text: t('autoOps.pathOps4'), path: '/auto-ops', tab: 'events' },
+      { text: t('autoOps.pathOps5'), path: '/logs' },
+    ],
+  },
+  {
+    key: 'container',
+    icon: '📦',
+    title: t('autoOps.pathContainerTitle'),
+    desc: t('autoOps.pathContainerDesc'),
+    steps: [
+      { text: t('autoOps.pathContainer1'), path: '/docker' },
+      { text: t('autoOps.pathContainer2'), path: '/k8s' },
+      { text: t('autoOps.pathContainer3'), path: '/devops' },
+      { text: t('autoOps.pathContainer4'), path: '/cluster' },
+    ],
+  },
+])
+
+const compareRows = computed(() => [
+  { feature: t('autoOps.cmpServiceWatch'), ow: true, bt: true, op: true },
+  { feature: t('autoOps.cmpSslRenew'), ow: true, bt: true, op: true },
+  { feature: t('autoOps.cmpBackup'), ow: true, bt: true, op: true },
+  { feature: t('autoOps.cmpCron'), ow: true, bt: true, op: true },
+  { feature: t('autoOps.cmpWebsiteAudit'), ow: true, bt: false, op: false },
+  { feature: t('autoOps.cmpUptime'), ow: true, bt: true, op: true },
+  { feature: t('autoOps.cmpK8s'), ow: true, bt: false, op: true },
+  { feature: t('autoOps.cmpAbTest'), ow: true, bt: false, op: false },
+  { feature: t('autoOps.cmpDevops'), ow: true, bt: false, op: false },
+  { feature: t('autoOps.cmpMemRelief'), ow: true, bt: false, op: false },
+  { feature: t('autoOps.cmpWebhook'), ow: true, bt: true, op: true },
+  { feature: t('autoOps.cmpHooks'), ow: true, bt: true, op: false },
+])
+
+const glossaryItems = computed(() => [
+  { term: t('autoOps.glossaryWatch'), def: t('autoOps.glossaryWatchDef') },
+  { term: t('autoOps.glossaryCron'), def: t('autoOps.glossaryCronDef') },
+  { term: t('autoOps.glossaryWebhook'), def: t('autoOps.glossaryWebhookDef') },
+  { term: t('autoOps.glossarySSL'), def: t('autoOps.glossarySSLDef') },
+  { term: t('autoOps.glossaryUptime'), def: t('autoOps.glossaryUptimeDef') },
+  { term: t('autoOps.glossaryK8s'), def: t('autoOps.glossaryK8sDef') },
+])
+
+function goPath(path: string, tabName?: string) {
+  if (path === '/auto-ops' && tabName) {
+    tab.value = tabName
+    router.replace({ path, query: { tab: tabName } })
+    return
+  }
+  router.push(path)
+}
+
+const webStackPattern = /^(nginx|openresty|apache|caddy|mysql|mariadb|postgresql|redis|php|memcached)/i
+
+async function applyBeginnerPreset() {
+  applyingPreset.value = 'site'
+  try {
+    await api.put('/auto-ops/config', {
+      ...configForm.value,
+      enabled: true,
+      ssl_auto_renew: true,
+      website_scan_enabled: true,
+      alert_days_ssl: 14,
+      alert_days_site: 14,
+    })
+    const keys = watches.value.filter((w: any) => webStackPattern.test(w.key)).map((w: any) => w.key)
+    if (keys.length) {
+      await api.post('/auto-ops/watch/bulk', { keys, watch_enabled: true, auto_restart: true })
+    }
+    ElMessage.success(t('autoOps.presetSiteApplied'))
+    await load()
+    await loadOverview()
+    tab.value = 'watch'
+  } catch (e: any) {
+    ElMessage.error(e?.error || e?.message || t('autoOps.updateFailed'))
+  } finally {
+    applyingPreset.value = ''
+  }
+}
+
+async function applyOpsPreset() {
+  applyingPreset.value = 'ops'
+  try {
+    await api.put('/auto-ops/config', {
+      ...configForm.value,
+      enabled: true,
+      resource_enabled: true,
+      cpu_threshold: 85,
+      mem_threshold: 85,
+      disk_threshold: 90,
+      notify_on_down: true,
+      notify_on_fail: true,
+      mem_auto_relief: true,
+      ssl_auto_renew: true,
+      website_scan_enabled: true,
+    })
+    ElMessage.success(t('autoOps.presetOpsApplied'))
+    await load()
+    await loadOverview()
+    tab.value = 'settings'
+  } catch (e: any) {
+    ElMessage.error(e?.error || e?.message || t('autoOps.updateFailed'))
+  } finally {
+    applyingPreset.value = ''
+  }
+}
 
 function liveTagType(s: string) {
   if (s === 'running') return 'success'
@@ -273,6 +407,7 @@ async function bulkEnable(autoRestart: boolean) {
 }
 
 onMounted(() => {
+  if (tab.value === 'guide') localStorage.setItem('autoOpsGuideSeen', '1')
   load()
   loadOverview()
   loadEvents()
@@ -280,6 +415,7 @@ onMounted(() => {
   if (route.query.tab === 'events') tab.value = 'events'
   if (route.query.tab === 'settings') tab.value = 'settings'
   if (route.query.tab === 'websites') tab.value = 'websites'
+  if (route.query.tab === 'guide') tab.value = 'guide'
   loadWebsiteAudits()
   timer = setInterval(() => {
     load()
@@ -314,6 +450,112 @@ onUnmounted(() => clearInterval(timer))
     </div>
 
     <el-tabs v-model="tab" @tab-change="(name: string) => { if (name === 'websites') loadWebsiteAudits() }">
+      <el-tab-pane :label="t('autoOps.guideTab')" name="guide">
+        <el-alert type="info" :closable="false" show-icon class="guide-intro">
+          <template #title>{{ t('autoOps.guideIntroTitle') }}</template>
+          <template #default>
+            <p class="guide-intro-text">{{ t('autoOps.guideIntroBody') }}</p>
+          </template>
+        </el-alert>
+
+        <h3 class="section-title">{{ t('autoOps.presetTitle') }}</h3>
+        <p class="section-desc">{{ t('autoOps.presetDesc') }}</p>
+        <div class="preset-row">
+          <el-card shadow="never" class="preset-card">
+            <div class="preset-head">🚀 {{ t('autoOps.presetSiteTitle') }}</div>
+            <p class="preset-body">{{ t('autoOps.presetSiteBody') }}</p>
+            <ul class="preset-list">
+              <li>{{ t('autoOps.presetSiteItem1') }}</li>
+              <li>{{ t('autoOps.presetSiteItem2') }}</li>
+              <li>{{ t('autoOps.presetSiteItem3') }}</li>
+            </ul>
+            <el-button type="primary" :loading="applyingPreset === 'site'" @click="applyBeginnerPreset">
+              {{ t('autoOps.presetSiteBtn') }}
+            </el-button>
+          </el-card>
+          <el-card shadow="never" class="preset-card">
+            <div class="preset-head">🛡️ {{ t('autoOps.presetOpsTitle') }}</div>
+            <p class="preset-body">{{ t('autoOps.presetOpsBody') }}</p>
+            <ul class="preset-list">
+              <li>{{ t('autoOps.presetOpsItem1') }}</li>
+              <li>{{ t('autoOps.presetOpsItem2') }}</li>
+              <li>{{ t('autoOps.presetOpsItem3') }}</li>
+            </ul>
+            <el-button type="success" :loading="applyingPreset === 'ops'" @click="applyOpsPreset">
+              {{ t('autoOps.presetOpsBtn') }}
+            </el-button>
+          </el-card>
+        </div>
+
+        <h3 class="section-title">{{ t('autoOps.pathTitle') }}</h3>
+        <p class="section-desc">{{ t('autoOps.pathDesc') }}</p>
+        <div class="path-grid">
+          <el-card v-for="path in beginnerPaths" :key="path.key" shadow="never" class="path-card">
+            <div class="path-head">
+              <span class="path-icon">{{ path.icon }}</span>
+              <div>
+                <div class="path-title">{{ path.title }}</div>
+                <div class="path-desc">{{ path.desc }}</div>
+              </div>
+            </div>
+            <ol class="path-steps">
+              <li v-for="(step, i) in path.steps" :key="i">
+                <button type="button" class="path-step-link" @click="goPath(step.path, step.tab)">
+                  {{ step.text }}
+                  <el-icon><ArrowRight /></el-icon>
+                </button>
+              </li>
+            </ol>
+          </el-card>
+        </div>
+
+        <h3 class="section-title">{{ t('autoOps.cmpTitle') }}</h3>
+        <p class="section-desc">{{ t('autoOps.cmpDesc') }}</p>
+        <el-table :data="compareRows" stripe class="cmp-table">
+          <el-table-column prop="feature" :label="t('autoOps.cmpFeature')" min-width="200" />
+          <el-table-column :label="t('autoOps.cmpOw')" width="100" align="center">
+            <template #default="{ row }">
+              <el-icon v-if="row.ow" color="var(--el-color-success)"><CircleCheck /></el-icon>
+              <span v-else class="cmp-no">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('autoOps.cmpBt')" width="100" align="center">
+            <template #default="{ row }">
+              <el-icon v-if="row.bt" color="var(--el-color-success)"><CircleCheck /></el-icon>
+              <span v-else class="cmp-no">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('autoOps.cmpOp')" width="100" align="center">
+            <template #default="{ row }">
+              <el-icon v-if="row.op" color="var(--el-color-success)"><CircleCheck /></el-icon>
+              <span v-else class="cmp-no">—</span>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <h3 class="section-title">{{ t('autoOps.glossaryTitle') }}</h3>
+        <div class="glossary-grid">
+          <div v-for="item in glossaryItems" :key="item.term" class="glossary-item">
+            <strong>{{ item.term }}</strong>
+            <p>{{ item.def }}</p>
+          </div>
+        </div>
+
+        <el-alert type="warning" :closable="false" show-icon class="guide-faq">
+          <template #title>{{ t('autoOps.faqTitle') }}</template>
+          <template #default>
+            <dl class="faq-list">
+              <dt>{{ t('autoOps.faq1Q') }}</dt>
+              <dd>{{ t('autoOps.faq1A') }}</dd>
+              <dt>{{ t('autoOps.faq2Q') }}</dt>
+              <dd>{{ t('autoOps.faq2A') }}</dd>
+              <dt>{{ t('autoOps.faq3Q') }}</dt>
+              <dd>{{ t('autoOps.faq3A') }}</dd>
+            </dl>
+          </template>
+        </el-alert>
+      </el-tab-pane>
+
       <el-tab-pane :label="t('autoOps.overview')" name="overview">
         <div class="overview-grid">
           <div class="resource-row">
@@ -418,8 +660,12 @@ onUnmounted(() => clearInterval(timer))
           <button v-for="link in quickLinks" :key="link.path" type="button" class="link-card" @click="router.push(link.path)">
             <el-icon class="link-icon"><component :is="link.icon" /></el-icon>
             <div class="link-body">
-              <div class="link-title">{{ link.title }}</div>
+              <div class="link-title-row">
+                <span class="link-title">{{ link.title }}</span>
+                <el-tag v-if="link.adminOnly && !isAdmin" type="warning" size="small">{{ t('autoOps.adminOnly') }}</el-tag>
+              </div>
               <div class="link-desc">{{ link.desc }}</div>
+              <div class="link-audience">{{ link.audience }}</div>
             </div>
             <span class="link-stat">{{ link.stat }}</span>
             <el-icon><ArrowRight /></el-icon>
@@ -609,6 +855,10 @@ onUnmounted(() => clearInterval(timer))
           <el-form-item v-if="configForm.resource_enabled" :label="t('autoOps.diskThreshold')">
             <el-input-number v-model="configForm.disk_threshold" :min="50" :max="100" />
           </el-form-item>
+          <el-form-item :label="t('autoOps.memAutoRelief')">
+            <el-switch v-model="configForm.mem_auto_relief" />
+            <span class="form-hint">{{ t('autoOps.memAutoReliefHint') }}</span>
+          </el-form-item>
 
           <el-divider content-position="left">{{ t('autoOps.sectionExpiry') }}</el-divider>
           <el-form-item :label="t('autoOps.sslAutoRenew')">
@@ -675,6 +925,47 @@ onUnmounted(() => clearInterval(timer))
 </template>
 
 <style scoped>
+.guide-intro { margin-bottom: 20px; }
+.guide-intro-text { margin: 8px 0 0; line-height: 1.7; font-size: 13px; }
+.section-title { margin: 24px 0 8px; font-size: 16px; font-weight: 600; }
+.section-desc { margin: 0 0 12px; font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.6; }
+.preset-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.preset-card { border: 1px solid var(--el-border-color-lighter); }
+.preset-head { font-weight: 600; margin-bottom: 8px; }
+.preset-body { margin: 0 0 10px; font-size: 13px; color: var(--el-text-color-regular); line-height: 1.6; }
+.preset-list { margin: 0 0 14px; padding-left: 18px; font-size: 13px; line-height: 1.7; color: var(--el-text-color-secondary); }
+.path-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.path-card { border: 1px solid var(--el-border-color-lighter); }
+.path-head { display: flex; gap: 10px; margin-bottom: 10px; }
+.path-icon { font-size: 28px; line-height: 1; }
+.path-title { font-weight: 600; margin-bottom: 4px; }
+.path-desc { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.5; }
+.path-steps { margin: 0; padding-left: 18px; }
+.path-step-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--el-color-primary);
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1.8;
+}
+.path-step-link:hover { text-decoration: underline; }
+.cmp-table { margin-bottom: 8px; }
+.cmp-no { color: var(--el-text-color-placeholder); }
+.glossary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.glossary-item { padding: 12px; border-radius: 8px; background: var(--el-fill-color-light); }
+.glossary-item strong { display: block; margin-bottom: 6px; font-size: 13px; }
+.glossary-item p { margin: 0; font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.6; }
+.guide-faq { margin-top: 20px; }
+.faq-list { margin: 8px 0 0; }
+.faq-list dt { font-weight: 600; font-size: 13px; margin-top: 10px; }
+.faq-list dd { margin: 4px 0 0; font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.6; }
+.link-title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.link-audience { margin-top: 4px; font-size: 11px; color: var(--el-color-primary); }
 .auto-ops-page { width: 100%; }
 .page-header {
   display: flex;
