@@ -65,6 +65,7 @@ func (s *Service) TrackingSnippet(clientID, apiURL string) TrackingSnippet {
 	if !strings.HasSuffix(apiURL, "/api") {
 		apiURL += "/api"
 	}
+	scriptBase := strings.TrimSuffix(apiURL, "/api")
 
 	snippet := fmt.Sprintf(`<script>
   window.op=window.op||function(){var n=[];return new Proxy(function(){arguments.length&&n.push([].slice.call(arguments))},{get:function(t,r){return"q"===r?n:function(){n.push([r].concat([].slice.call(arguments)))}},has:function(t,r){return"q"===r}})()}();
@@ -76,9 +77,10 @@ func (s *Service) TrackingSnippet(clientID, apiURL string) TrackingSnippet {
     trackAttributes: true,
   });
 </script>
-<script src="https://openpanel.dev/op1.js" defer async></script>`,
+<script src="%s/op1.js" defer async></script>`,
 		html.EscapeString(apiURL),
 		html.EscapeString(clientID),
+		html.EscapeString(scriptBase),
 	)
 	return TrackingSnippet{Snippet: snippet}
 }

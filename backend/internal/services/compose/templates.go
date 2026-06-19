@@ -218,7 +218,7 @@ func ListTemplates() []Template {
 		{ID: "redis", Name: "Redis 7", Description: "In-memory cache on port 6379"},
 		{ID: "wordpress", Name: "WordPress", Description: "WordPress + MySQL stack on port 8080"},
 		{ID: "portainer", Name: "Portainer CE", Description: "Docker management UI on port 9000"},
-		{ID: "openpanel", Name: "OpenPanel Analytics", Description: "Product analytics stack — dashboard :3300, API :3333"},
+		{ID: "openpanel", Name: "网站产品分析", Description: "网站产品分析服务 — 仪表盘 :3300，API :3333"},
 	}
 }
 

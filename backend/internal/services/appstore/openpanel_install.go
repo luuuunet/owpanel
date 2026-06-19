@@ -106,7 +106,7 @@ func installOpenpanelAnalytics(dataDir string) error {
 	if err := os.WriteFile(envPath, []byte(openpanelEnvFile(pgPass, cookieSecret)), 0600); err != nil {
 		return fmt.Errorf("write .env: %w", err)
 	}
-	logInstallLine(fmt.Sprintf("OpenPanel 配置已写入 %s", dir))
+	logInstallLine(fmt.Sprintf("网站产品分析配置已写入 %s", dir))
 
 	if err := runCommandInDir(dir, "docker", "compose", "pull"); err != nil {
 		logInstallLine("docker compose pull 警告: " + err.Error())
@@ -114,7 +114,7 @@ func installOpenpanelAnalytics(dataDir string) error {
 	if err := runCommandInDir(dir, "docker", "compose", "up", "-d"); err != nil {
 		return fmt.Errorf("docker compose up: %w", err)
 	}
-	logInstallLine("OpenPanel Analytics 已启动（Dashboard :3300，API :3333）")
+	logInstallLine("网站产品分析已启动（仪表盘 :3300，API :3333）")
 	return nil
 }
 

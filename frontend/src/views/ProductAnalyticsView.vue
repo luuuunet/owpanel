@@ -7,7 +7,6 @@ import { ElMessage } from 'element-plus'
 import {
   Connection,
   CopyDocument,
-  DataAnalysis,
   Link,
   RefreshRight,
   VideoPlay,
@@ -35,12 +34,12 @@ const trackingForm = ref({
 })
 
 const snippet = ref('')
-const features = computed(() => [
-  t('productAnalytics.featureFunnels'),
-  t('productAnalytics.featureReplay'),
-  t('productAnalytics.featureCohorts'),
-  t('productAnalytics.featureAB'),
-  t('productAnalytics.featureCookieless'),
+const usageSteps = computed(() => [
+  { title: t('productAnalytics.step1Title'), desc: t('productAnalytics.step1Desc') },
+  { title: t('productAnalytics.step2Title'), desc: t('productAnalytics.step2Desc') },
+  { title: t('productAnalytics.step3Title'), desc: t('productAnalytics.step3Desc') },
+  { title: t('productAnalytics.step4Title'), desc: t('productAnalytics.step4Desc') },
+  { title: t('productAnalytics.step5Title'), desc: t('productAnalytics.step5Desc') },
 ])
 
 const selectedSite = computed(() => websites.value.find((w) => w.id === selectedSiteId.value) || null)
@@ -104,7 +103,7 @@ async function deployFromCompose() {
   deploying.value = true
   try {
     await api.post('/compose', {
-      name: 'OpenPanel Analytics',
+      name: t('productAnalytics.composeProjectName'),
       path: '/opt/compose/openpanel-analytics',
       scaffold: true,
       template: 'openpanel',
@@ -177,14 +176,14 @@ onMounted(refreshAll)
       <el-button :icon="RefreshRight" :loading="loading" @click="refreshAll">{{ t('common.refresh') }}</el-button>
     </div>
 
-    <el-row :gutter="16" class="feature-row">
-      <el-col v-for="item in features" :key="item" :xs="24" :sm="12" :md="8" :lg="4">
-        <el-card shadow="never" class="feature-card">
-          <el-icon class="feature-icon"><DataAnalysis /></el-icon>
-          <span>{{ item }}</span>
-        </el-card>
-      </el-col>
-    </el-row>
+    <el-card shadow="never" class="section-card usage-card">
+      <template #header>
+        <span>{{ t('productAnalytics.usageGuide') }}</span>
+      </template>
+      <el-steps direction="vertical" :active="5">
+        <el-step v-for="(step, i) in usageSteps" :key="i" :title="step.title" :description="step.desc" />
+      </el-steps>
+    </el-card>
 
     <el-row :gutter="16">
       <el-col :xs="24" :lg="12">
@@ -225,13 +224,6 @@ onMounted(refreshAll)
               {{ t('productAnalytics.deployCompose') }}
             </el-button>
           </div>
-          <el-alert type="info" :closable="false" show-icon class="docs-alert">
-            <template #title>
-              <a href="https://openpanel.dev/docs" target="_blank" rel="noopener">{{ t('productAnalytics.docsLink') }}</a>
-              ·
-              <a href="https://github.com/Openpanel-dev/openpanel" target="_blank" rel="noopener">{{ t('productAnalytics.githubLink') }}</a>
-            </template>
-          </el-alert>
         </el-card>
       </el-col>
 
@@ -302,28 +294,8 @@ onMounted(refreshAll)
   font-size: 14px;
 }
 
-.feature-row {
-  margin-bottom: 0;
-}
-
-.feature-card {
+.usage-card {
   margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 56px;
-}
-
-.feature-card :deep(.el-card__body) {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-}
-
-.feature-icon {
-  color: var(--cf-orange);
-  font-size: 18px;
 }
 
 .section-card {
