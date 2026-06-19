@@ -18,6 +18,21 @@ import SoftwareIcon from '@/components/SoftwareIcon.vue'
 import SoftwareConfigDialog from '@/components/SoftwareConfigDialog.vue'
 import SoftwareInstallLogDialog from '@/components/SoftwareInstallLogDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  VideoPlay,
+  VideoPause,
+  RefreshRight,
+  Refresh,
+  Setting,
+  Tools,
+  Delete,
+  Document,
+  Message,
+  Link,
+  Top,
+  Sort,
+  MagicStick,
+} from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -511,45 +526,75 @@ onMounted(loadAll)
               <span v-else>—</span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('common.actions')" width="480" fixed="right">
+          <el-table-column :label="t('common.actions')" width="300" min-width="260" fixed="right" align="center" class-name="soft-actions-cell">
             <template #default="{ row }">
-              <el-button
-                v-if="row.status === 'installing'"
-                text
-                type="warning"
-                size="small"
-                @click="openInstallLog(row)"
-              >
-                {{ t('software.viewInstallLog') }}
-              </el-button>
-              <el-button
-                v-if="row.key === 'mail-server'"
-                text
-                type="warning"
-                size="small"
-                @click="goMailCenter"
-              >
-                {{ t('software.openMailCenter') }}
-              </el-button>
-              <el-button
-                v-if="row.key === 'phpmyadmin'"
-                text
-                type="warning"
-                size="small"
-                @click="openPhpMyAdmin(row)"
-              >
-                {{ t('software.openApp') }}
-              </el-button>
-              <el-button text type="primary" size="small" :loading="actionBusy(row, 'start')" @click="doAction(row, 'start')">{{ t('common.start') }}</el-button>
-              <el-button text type="warning" size="small" :loading="actionBusy(row, 'stop')" @click="doAction(row, 'stop')">{{ t('common.stop') }}</el-button>
-              <el-button text size="small" :loading="actionBusy(row, 'restart')" @click="doAction(row, 'restart')">{{ t('common.restart') }}</el-button>
-              <el-button text size="small" :loading="actionBusy(row, 'reload')" @click="doAction(row, 'reload')">{{ t('common.reload') }}</el-button>
-              <el-button text type="primary" size="small" @click="openConfig(row)">{{ t('common.config') }}</el-button>
-              <el-button v-if="hasUpgrade(row)" text type="primary" size="small" @click="upgradeToLatest(row)">{{ t('software.upgradeToLatest') }}</el-button>
-              <el-button text size="small" @click="openUpgrade(row)">{{ t('software.changeVersion') }}</el-button>
-              <el-button text size="small" @click="openSettings(row)">{{ t('common.settings') }}</el-button>
-              <el-button v-if="row.status !== 'simulated'" text size="small" @click="goAutoOps(row)">{{ t('autoOps.title') }}</el-button>
-              <el-button text type="danger" size="small" @click="uninstall(row)">{{ t('common.uninstall') }}</el-button>
+              <div class="soft-actions-bar">
+                <el-tooltip v-if="row.status === 'installing'" :content="t('software.viewInstallLog')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--warn">
+                    <el-button circle size="small" :icon="Document" @click="openInstallLog(row)" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip v-if="row.key === 'mail-server'" :content="t('software.openMailCenter')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--warn">
+                    <el-button circle size="small" :icon="Message" @click="goMailCenter" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip v-if="row.key === 'phpmyadmin'" :content="t('software.openApp')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--primary">
+                    <el-button circle size="small" :icon="Link" @click="openPhpMyAdmin(row)" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip :content="t('common.start')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--success">
+                    <el-button circle size="small" :icon="VideoPlay" :loading="actionBusy(row, 'start')" @click="doAction(row, 'start')" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip :content="t('common.stop')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--warn">
+                    <el-button circle size="small" :icon="VideoPause" :loading="actionBusy(row, 'stop')" @click="doAction(row, 'stop')" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip :content="t('common.restart')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--neutral">
+                    <el-button circle size="small" :icon="RefreshRight" :loading="actionBusy(row, 'restart')" @click="doAction(row, 'restart')" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip :content="t('common.reload')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--neutral">
+                    <el-button circle size="small" :icon="Refresh" :loading="actionBusy(row, 'reload')" @click="doAction(row, 'reload')" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip :content="t('common.config')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--primary">
+                    <el-button circle size="small" :icon="Setting" @click="openConfig(row)" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip v-if="hasUpgrade(row)" :content="t('software.upgradeToLatest')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--primary">
+                    <el-button circle size="small" :icon="Top" @click="upgradeToLatest(row)" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip :content="t('software.changeVersion')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--neutral">
+                    <el-button circle size="small" :icon="Sort" @click="openUpgrade(row)" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip :content="t('common.settings')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--neutral">
+                    <el-button circle size="small" :icon="Tools" @click="openSettings(row)" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip v-if="row.status !== 'simulated'" :content="t('autoOps.title')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--primary">
+                    <el-button circle size="small" :icon="MagicStick" @click="goAutoOps(row)" />
+                  </span>
+                </el-tooltip>
+                <el-tooltip :content="t('common.uninstall')" placement="top">
+                  <span class="soft-op-btn soft-op-btn--danger">
+                    <el-button circle size="small" :icon="Delete" @click="uninstall(row)" />
+                  </span>
+                </el-tooltip>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -674,4 +719,70 @@ onMounted(loadAll)
 .header-actions { display: flex; align-items: center; gap: 12px; }
 .store-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; flex-wrap: wrap; gap: 12px; }
 .store-total { color: #909399; font-size: 13px; }
+.soft-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--apple-radius-sm, 10px);
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--apple-glass-border, rgba(0, 0, 0, 0.06));
+}
+:deep(.soft-actions-cell) { vertical-align: middle; }
+:deep(.soft-actions-cell .cell) {
+  overflow: visible;
+  padding: 6px 8px;
+  line-height: normal;
+  white-space: normal;
+}
+.soft-op-btn {
+  display: inline-flex;
+  line-height: 0;
+}
+.soft-op-btn :deep(.el-button) {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  font-size: 15px;
+}
+.soft-op-btn--neutral :deep(.el-button:not(.is-disabled)) {
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+}
+.soft-op-btn--neutral :deep(.el-button:not(.is-disabled):hover) {
+  background: var(--el-fill-color);
+  color: var(--el-color-primary);
+}
+.soft-op-btn--primary :deep(.el-button:not(.is-disabled)) {
+  background: rgba(246, 130, 31, 0.1);
+  color: var(--cf-orange, #f6821f);
+}
+.soft-op-btn--primary :deep(.el-button:not(.is-disabled):hover) {
+  background: rgba(246, 130, 31, 0.18);
+}
+.soft-op-btn--success :deep(.el-button:not(.is-disabled)) {
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+}
+.soft-op-btn--success :deep(.el-button:not(.is-disabled):hover) {
+  background: var(--el-color-success-light-8);
+}
+.soft-op-btn--warn :deep(.el-button:not(.is-disabled)) {
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
+}
+.soft-op-btn--warn :deep(.el-button:not(.is-disabled):hover) {
+  background: var(--el-color-warning-light-8);
+}
+.soft-op-btn--danger :deep(.el-button:not(.is-disabled)) {
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+}
+.soft-op-btn--danger :deep(.el-button:not(.is-disabled):hover) {
+  background: var(--el-color-danger-light-8);
+}
 </style>
