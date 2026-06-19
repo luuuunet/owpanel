@@ -22,8 +22,11 @@ func (s *Service) JoinInfo() (*JoinInfo, error) {
 	if !s.linuxHost() {
 		return nil, fmt.Errorf("K8s 加入节点需在 Linux 服务器上运行")
 	}
+	if s.ClusterMode() == ModeStandard {
+		return nil, fmt.Errorf("标准 K8s 集群请使用 kubeadm join 或云厂商控制台获取节点加入命令")
+	}
 	if !s.k3sRunning() {
-		return nil, fmt.Errorf("k3s 未运行，请先安装并启动 k3s")
+		return nil, fmt.Errorf("K3s 未运行，请先安装并启动 K3s")
 	}
 
 	host := s.serverHost()
@@ -57,7 +60,7 @@ func (s *Service) serverHost() string {
 			return ip
 		}
 	}
-	out, err := kubectl("get", "nodes", "-o", "jsonpath={.items[0].status.addresses[?(@.type==\"InternalIP\")].address}")
+	out, err := s.kubectl("get", "nodes", "-o", "jsonpath={.items[0].status.addresses[?(@.type==\"InternalIP\")].address}")
 	if err == nil {
 		if ip := strings.TrimSpace(out); ip != "" {
 			return ip
@@ -93,6 +96,9 @@ type InstallResult struct {
 }
 
 func (s *Service) Install() (*InstallResult, error) {
+	if s.ClusterMode() == ModeStandard {
+		return nil, fmt.Errorf("标准 K8s 模式请接入已有集群，无需安装 K3s")
+	}
 	if !s.linuxHost() {
 		return nil, fmt.Errorf("K3s 仅支持 Linux 服务器")
 	}

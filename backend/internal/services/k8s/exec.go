@@ -5,29 +5,28 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 
 	"github.com/luuuunet/owpanel/internal/services/appstore"
 )
 
-func kubeEnv() []string {
-	env := os.Environ()
-	if runtime.GOOS == "linux" {
-		env = append(env, "KUBECONFIG="+appstore.K3sKubeConfig)
+func (s *Service) kubectl(args ...string) (string, error) {
+	if !s.linuxHost() {
+		return "", fmt.Errorf("K8s 需要 Linux 服务器")
 	}
-	return env
-}
 
-func kubectl(args ...string) (string, error) {
-	if runtime.GOOS != "linux" {
-		return "", fmt.Errorf("K8s 需要 Linux 服务器与 k3s")
-	}
-	if !appstore.K3sRunning() {
+	kubeconfig := appstore.K3sKubeConfig
+	if s.ClusterMode() == ModeStandard {
+		kubeconfig = s.KubeconfigPath()
+		if _, err := os.Stat(kubeconfig); err != nil {
+			return "", fmt.Errorf("kubeconfig 不存在: %s", kubeconfig)
+		}
+	} else if !appstore.K3sRunning() {
 		return "", fmt.Errorf("k3s 未运行")
 	}
+
 	cmd := exec.Command("kubectl", args...)
-	cmd.Env = kubeEnv()
+	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

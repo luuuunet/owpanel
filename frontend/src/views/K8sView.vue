@@ -6,8 +6,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { cfTheme } from '@/config/theme'
 
 interface StatusInfo {
+  cluster_mode: string
+  kubeconfig_path: string
   k3s_running: boolean
   k3s_installed: boolean
+  cluster_connected: boolean
   nodes_ready: number
   nodes_total: number
   system_pods_ready: number
@@ -49,11 +52,16 @@ const installLoading = ref(false)
 const workloadsLoading = ref(false)
 
 const dashboard = ref<{
+  settings: { cluster_mode: string; kubeconfig_path: string }
   status: StatusInfo | null
   health_score: number
   setup_steps: SetupStep[]
   checklist: ChecklistItem[]
 } | null>(null)
+
+const clusterMode = ref<'k3s' | 'standard'>('k3s')
+const kubeconfigPath = ref('/root/.kube/config')
+const settingsSaving = ref(false)
 
 const joinInfo = ref<JoinInfo | null>(null)
 const pods = ref<any[]>([])
@@ -75,17 +83,46 @@ const healthColor = computed(() => {
 const statusCards = computed(() => {
   const s = status.value
   if (!s) return []
+  const runtimeLabel = clusterMode.value === 'standard' ? t('k8s.cardK8s') : t('k8s.cardK3s')
+  const runtimeValue = s.cluster_connected ? t('k8s.running') : t('k8s.stopped')
   return [
-    { key: 'k3s', label: t('k8s.cardK3s'), value: s.k3s_running ? t('k8s.running') : t('k8s.stopped'), type: s.k3s_running ? 'success' : 'info' },
+    { key: 'runtime', label: runtimeLabel, value: runtimeValue, type: s.cluster_connected ? 'success' : 'info' },
     { key: 'nodes', label: t('k8s.cardNodes'), value: `${s.nodes_ready}/${s.nodes_total}`, type: s.nodes_total > 0 && s.nodes_ready >= s.nodes_total ? 'success' : 'warning' },
     { key: 'pods', label: t('k8s.cardSystemPods'), value: `${s.system_pods_ready}/${s.system_pods_total}`, type: s.system_pods_ready >= s.system_pods_total && s.system_pods_total > 0 ? 'success' : 'warning' },
     { key: 'ready', label: t('k8s.cardReady'), value: s.k8s_ready ? t('k8s.ready') : t('k8s.notReady'), type: s.k8s_ready ? 'success' : 'warning' },
   ] as const
 })
 
+const isK3sMode = computed(() => clusterMode.value === 'k3s')
+
 async function loadDashboard() {
   const res: any = await api.get('/k8s/dashboard')
   dashboard.value = res.data || null
+  if (res.data?.settings) {
+    clusterMode.value = res.data.settings.cluster_mode === 'standard' ? 'standard' : 'k3s'
+    kubeconfigPath.value = res.data.settings.kubeconfig_path || '/root/.kube/config'
+  }
+}
+
+async function saveClusterSettings() {
+  settingsSaving.value = true
+  try {
+    await api.put('/k8s/settings', {
+      cluster_mode: clusterMode.value,
+      kubeconfig_path: kubeconfigPath.value,
+    })
+    ElMessage.success(t('common.saved'))
+    await loadAll()
+  } catch (e: any) {
+    ElMessage.error(resolveApiError(e, t('common.failed')))
+  } finally {
+    settingsSaving.value = false
+  }
+}
+
+async function onClusterModeChange(mode: 'k3s' | 'standard') {
+  clusterMode.value = mode
+  await saveClusterSettings()
 }
 
 async function loadJoinInfo() {
@@ -176,6 +213,9 @@ async function runStepAction(step: SetupStep) {
     case 'install_k3s':
       await installK3s()
       break
+    case 'save_kubeconfig':
+      await saveClusterSettings()
+      break
     case 'refresh':
       await loadAll()
       break
@@ -213,12 +253,34 @@ onMounted(loadAll)
         <p class="view-sub">{{ t('k8s.subtitle') }}</p>
       </div>
       <div class="header-actions">
+        <el-segmented
+          v-model="clusterMode"
+          :options="[
+            { label: t('k8s.modeK3s'), value: 'k3s' },
+            { label: t('k8s.modeStandard'), value: 'standard' },
+          ]"
+          @change="onClusterModeChange"
+        />
         <el-button :loading="loading" @click="loadAll">{{ t('common.refresh') }}</el-button>
-        <el-button type="primary" :loading="wizardLoading" :disabled="status?.linux_only" @click="runWizard">
-          {{ t('k8s.wizardOneClick') }}
+        <el-button
+          type="primary"
+          :loading="wizardLoading"
+          :disabled="status?.linux_only || (!isK3sMode && !status?.cluster_connected)"
+          @click="runWizard"
+        >
+          {{ isK3sMode ? t('k8s.wizardOneClick') : t('k8s.wizardVerify') }}
         </el-button>
       </div>
     </div>
+
+    <el-alert
+      v-if="!isK3sMode"
+      type="info"
+      show-icon
+      :closable="false"
+      :title="t('k8s.standardModeHint')"
+      class="mode-alert"
+    />
 
     <el-tabs v-model="activeTab" type="border-card" class="k8s-tabs" @tab-change="onTabChange">
       <el-tab-pane :label="t('k8s.tabDashboard')" name="dashboard">
@@ -250,6 +312,19 @@ onMounted(loadAll)
             </el-card>
           </el-col>
         </el-row>
+
+        <el-card v-if="!isK3sMode" shadow="never" class="section-card">
+          <template #header><span>{{ t('k8s.kubeconfigTitle') }}</span></template>
+          <el-form label-width="120px" inline @submit.prevent>
+            <el-form-item :label="t('k8s.kubeconfigPath')">
+              <el-input v-model="kubeconfigPath" style="width: 420px" placeholder="/root/.kube/config" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="settingsSaving" @click="saveClusterSettings">{{ t('common.save') }}</el-button>
+            </el-form-item>
+          </el-form>
+          <p class="kube-hint">{{ t('k8s.kubeconfigHint') }}</p>
+        </el-card>
 
         <el-card shadow="never" class="section-card">
           <template #header><span>{{ t('k8s.setupWizard') }}</span></template>
@@ -330,7 +405,7 @@ onMounted(loadAll)
               </el-table>
             </el-tab-pane>
           </el-tabs>
-          <p v-if="!status?.k3s_running" class="empty-hint">{{ t('k8s.workloadsNeedK3s') }}</p>
+          <p v-if="!status?.cluster_connected" class="empty-hint">{{ isK3sMode ? t('k8s.workloadsNeedK3s') : t('k8s.workloadsNeedK8s') }}</p>
         </div>
       </el-tab-pane>
 
@@ -356,7 +431,7 @@ onMounted(loadAll)
             <el-button type="primary" size="small" @click="copyText(joinInfo.commands?.worker || '')">{{ t('k8s.copyCmd') }}</el-button>
           </div>
         </el-card>
-        <el-empty v-else :description="t('k8s.joinUnavailable')" />
+        <el-empty v-else :description="isK3sMode ? t('k8s.joinUnavailable') : t('k8s.joinStandardHint')" />
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -388,4 +463,6 @@ onMounted(loadAll)
 .join-cmd { flex: 1; min-width: 200px; font-size: 12px; word-break: break-all; padding: 8px; background: var(--el-fill-color); border-radius: 4px; }
 .token-preview { font-size: 12px; }
 .empty-hint { margin-top: 12px; color: var(--el-text-color-secondary); font-size: 13px; }
+.mode-alert { margin-bottom: 12px; }
+.kube-hint { margin: 0; color: var(--el-text-color-secondary); font-size: 12px; }
 </style>

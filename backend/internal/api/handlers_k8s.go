@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/luuuunet/owpanel/internal/api/response"
+	"github.com/luuuunet/owpanel/internal/services/k8s"
 )
 
 func (s *Server) registerK8sRoutes(admin *gin.RouterGroup) {
@@ -15,6 +16,8 @@ func (s *Server) registerK8sRoutes(admin *gin.RouterGroup) {
 	admin.GET("/k8s/namespaces", s.handleK8sNamespaces)
 	admin.POST("/k8s/install", s.handleK8sInstall)
 	admin.POST("/k8s/wizard", s.handleK8sWizard)
+	admin.GET("/k8s/settings", s.handleK8sSettingsGet)
+	admin.PUT("/k8s/settings", s.handleK8sSettingsPut)
 }
 
 func (s *Server) handleK8sDashboard(c *gin.Context) {
@@ -100,4 +103,21 @@ func (s *Server) handleK8sWizard(c *gin.Context) {
 		return
 	}
 	response.OK(c, res)
+}
+
+func (s *Server) handleK8sSettingsGet(c *gin.Context) {
+	response.OK(c, s.k8s.GetSettings())
+}
+
+func (s *Server) handleK8sSettingsPut(c *gin.Context) {
+	var req k8s.ClusterSettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, err.Error())
+		return
+	}
+	if err := s.k8s.UpdateSettings(req); err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.OK(c, s.k8s.GetSettings())
 }

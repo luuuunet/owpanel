@@ -40,7 +40,7 @@ type NamespaceRow struct {
 }
 
 func (s *Service) ListNodes() ([]NodeRow, error) {
-	out, err := kubectl("get", "nodes", "-o", "json")
+	out, err := s.kubectl("get", "nodes", "-o", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (s *Service) ListNodes() ([]NodeRow, error) {
 				break
 			}
 		}
-		rolesOut, _ := kubectl("get", "node", n.Metadata.Name, "-o", "jsonpath={.metadata.labels.node-role\\.kubernetes\\.io/control-plane}")
+		rolesOut, _ := s.kubectl("get", "node", n.Metadata.Name, "-o", "jsonpath={.metadata.labels.node-role\\.kubernetes\\.io/control-plane}")
 		roles := "worker"
 		if rolesOut != "" {
 			roles = "control-plane,worker"
@@ -94,7 +94,7 @@ func (s *Service) ListNodes() ([]NodeRow, error) {
 }
 
 func (s *Service) ListPods() ([]PodRow, error) {
-	out, err := kubectl("get", "pods", "-A", "-o", "json")
+	out, err := s.kubectl("get", "pods", "-A", "-o", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (s *Service) ListPods() ([]PodRow, error) {
 }
 
 func (s *Service) ListDeployments() ([]DeploymentRow, error) {
-	out, err := kubectl("get", "deployments", "-A", "-o", "json")
+	out, err := s.kubectl("get", "deployments", "-A", "-o", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +184,7 @@ func (s *Service) ListDeployments() ([]DeploymentRow, error) {
 }
 
 func (s *Service) ListNamespaces() ([]NamespaceRow, error) {
-	out, err := kubectl("get", "namespaces", "-o", "json")
+	out, err := s.kubectl("get", "namespaces", "-o", "json")
 	if err != nil {
 		return nil, err
 	}

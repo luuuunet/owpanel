@@ -8,19 +8,27 @@ import (
 )
 
 type StatusResult struct {
-	K3sInstalled    bool   `json:"k3s_installed"`
-	K3sRunning      bool   `json:"k3s_running"`
-	NodesReady      int    `json:"nodes_ready"`
-	NodesTotal      int    `json:"nodes_total"`
-	SystemPodsReady int    `json:"system_pods_ready"`
-	SystemPodsTotal int    `json:"system_pods_total"`
-	K8sReady        bool   `json:"k8s_ready"`
-	Hint            string `json:"hint,omitempty"`
-	LinuxOnly       bool   `json:"linux_only"`
+	ClusterMode       string `json:"cluster_mode"`
+	KubeconfigPath    string `json:"kubeconfig_path"`
+	K3sInstalled      bool   `json:"k3s_installed"`
+	K3sRunning        bool   `json:"k3s_running"`
+	ClusterConnected  bool   `json:"cluster_connected"`
+	NodesReady        int    `json:"nodes_ready"`
+	NodesTotal        int    `json:"nodes_total"`
+	SystemPodsReady   int    `json:"system_pods_ready"`
+	SystemPodsTotal   int    `json:"system_pods_total"`
+	K8sReady          bool   `json:"k8s_ready"`
+	Hint              string `json:"hint,omitempty"`
+	LinuxOnly         bool   `json:"linux_only"`
 }
 
 func (s *Service) Status() (*StatusResult, error) {
-	out := &StatusResult{LinuxOnly: !s.linuxHost()}
+	mode := s.ClusterMode()
+	out := &StatusResult{
+		ClusterMode:    mode,
+		KubeconfigPath: s.KubeconfigPath(),
+		LinuxOnly:      !s.linuxHost(),
+	}
 	if !s.linuxHost() {
 		out.Hint = "K8s 集群管理需在 Linux 服务器上运行"
 		return out, nil
@@ -28,13 +36,26 @@ func (s *Service) Status() (*StatusResult, error) {
 
 	out.K3sRunning = s.k3sRunning()
 	out.K3sInstalled = out.K3sRunning || s.appInstalled(k3sAppKey)
-	if !out.K3sInstalled {
-		out.Hint = "请先在软件商店安装 k3s，或使用下方一键安装"
-		return out, nil
-	}
-	if !out.K3sRunning {
-		out.Hint = "k3s 已安装但未运行，请执行 systemctl start k3s"
-		return out, nil
+	out.ClusterConnected = s.clusterConnected()
+
+	if mode == ModeStandard {
+		if !s.kubeconfigExists() {
+			out.Hint = "请配置 kubeconfig 路径（如 /root/.kube/config 或 kubeadm 生成的 admin.conf）"
+			return out, nil
+		}
+		if !out.ClusterConnected {
+			out.Hint = "无法连接集群，请检查 kubeconfig 与 kubectl 权限"
+			return out, nil
+		}
+	} else {
+		if !out.K3sInstalled {
+			out.Hint = "请使用下方一键安装 K3s，或在软件商店安装 k3s"
+			return out, nil
+		}
+		if !out.K3sRunning {
+			out.Hint = "K3s 已安装但未运行，请执行 systemctl start k3s"
+			return out, nil
+		}
 	}
 
 	ready, total := s.nodeCounts()
@@ -49,18 +70,23 @@ func (s *Service) Status() (*StatusResult, error) {
 		out.Hint = "集群节点尚未就绪，请稍后刷新"
 	} else if !out.K8sReady {
 		out.Hint = "部分节点或系统 Pod 未就绪，请检查 kubectl get nodes / kubectl get pods -n kube-system"
+	} else if mode == ModeStandard {
+		out.Hint = "已接入标准 Kubernetes 集群，可在「工作负载」查看资源"
 	} else {
-		out.Hint = "集群运行正常，可在「工作负载」查看资源，在「加入节点」获取 Worker 命令"
+		out.Hint = "K3s 集群运行正常，可在「工作负载」查看资源，在「加入节点」获取 Worker 命令"
 	}
 	return out, nil
 }
 
 func ClusterReady() bool {
-	if !appstore.K3sRunning() {
-		return false
-	}
 	s := &Service{}
 	if !s.linuxHost() {
+		return false
+	}
+	if s.ClusterMode() == ModeK3s && !appstore.K3sRunning() {
+		return false
+	}
+	if !s.clusterConnected() {
 		return false
 	}
 	ready, total := s.nodeCounts()
@@ -72,7 +98,7 @@ func ClusterReady() bool {
 }
 
 func (s *Service) nodeCounts() (ready, total int) {
-	out, err := kubectl("get", "nodes", "-o", "json")
+	out, err := s.kubectl("get", "nodes", "-o", "json")
 	if err != nil {
 		return 0, 0
 	}
@@ -102,10 +128,22 @@ func (s *Service) nodeCounts() (ready, total int) {
 }
 
 func (s *Service) systemPodCounts() (ready, total int) {
-	out, err := kubectl("get", "pods", "-n", "kube-system", "-o", "json")
+	ns := "kube-system"
+	if s.ClusterMode() == ModeStandard {
+		out, err := s.kubectl("get", "pods", "-n", ns, "-o", "json")
+		if err != nil {
+			return 0, 0
+		}
+		return parseSystemPods(out)
+	}
+	out, err := s.kubectl("get", "pods", "-n", ns, "-o", "json")
 	if err != nil {
 		return 0, 0
 	}
+	return parseSystemPods(out)
+}
+
+func parseSystemPods(out string) (ready, total int) {
 	var data struct {
 		Items []struct {
 			Status struct {
@@ -136,4 +174,12 @@ func (s *Service) systemPodCounts() (ready, total int) {
 		}
 	}
 	return ready, total
+}
+
+func (s *Service) sampleAppDeployed() bool {
+	out, err := s.kubectl("get", "deployment", "owpanel-nginx-demo", "-o", "name", "--ignore-not-found")
+	if err != nil {
+		return false
+	}
+	return len(strings.TrimSpace(out)) > 0
 }
