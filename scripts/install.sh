@@ -356,7 +356,10 @@ install_web_server() {
     case "$PKG" in
       apt)
         export DEBIAN_FRONTEND=noninteractive
-        apt-get install -y -qq nginx
+        if ! apt-get install -y -qq nginx 2>/dev/null; then
+          log "默认 apt 安装 Nginx 失败，尝试 stack 脚本 …"
+          bash "$(dirname "$0")/stack/fallback.sh" nginx
+        fi
         ;;
       dnf|yum)
         $PKG install -y nginx
@@ -439,9 +442,12 @@ install_database() {
   case "$PKG" in
     apt)
       export DEBIAN_FRONTEND=noninteractive
-      apt-get install -y -qq mariadb-server 2>/dev/null \
-        || apt-get install -y -qq default-mysql-server 2>/dev/null \
-        || apt-get install -y -qq mysql-server
+      if ! apt-get install -y -qq mariadb-server 2>/dev/null \
+        && ! apt-get install -y -qq default-mysql-server 2>/dev/null \
+        && ! apt-get install -y -qq mysql-server 2>/dev/null; then
+        log "默认 apt 安装数据库失败，尝试 stack 脚本 …"
+        bash "$(dirname "$0")/stack/fallback.sh" mariadb
+      fi
       ;;
     dnf|yum)
       $PKG install -y mariadb-server 2>/dev/null || $PKG install -y mysql-server

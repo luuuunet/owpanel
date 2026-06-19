@@ -27,7 +27,7 @@ func tryPHPInstall(key, version, installPath, dataDir string) (bool, error) {
 
 	switch runtime.GOOS {
 	case "linux":
-		if err := installPHPLinux(spec); err != nil {
+		if err := installPHPLinux(key, spec); err != nil {
 			return true, err
 		}
 		if err := configurePHPLinux(ver, key, dataDir); err != nil {
@@ -122,7 +122,7 @@ pm.max_spare_servers = 35
 	return nil
 }
 
-func installPHPLinux(spec packageSpec) error {
+func installPHPLinux(key string, spec packageSpec) error {
 	mgr := detectLinuxPkgMgr()
 	if err := installLinuxPackages(spec); err == nil {
 		return nil
@@ -132,17 +132,24 @@ func installPHPLinux(spec packageSpec) error {
 	case "apt":
 		logInstallLine("标准源 PHP 包不可用，尝试配置 ondrej/php PPA …")
 		if err := setupPHPDebianRepo(); err != nil {
-		 return fmt.Errorf("配置 PHP PPA 失败: %w", err)
+			logInstallLine(fmt.Sprintf("配置 PHP PPA 失败: %v", err))
+		} else if err := installLinuxPackages(spec); err == nil {
+			return nil
 		}
 	case "dnf", "yum":
 		logInstallLine("标准源 PHP 包不可用，尝试配置 Remi 仓库 …")
 		if err := setupPHPRemiRepo(); err != nil {
-			return fmt.Errorf("配置 Remi 仓库失败: %w", err)
+			logInstallLine(fmt.Sprintf("配置 Remi 仓库失败: %v", err))
+		} else if err := installLinuxPackages(spec); err == nil {
+			return nil
 		}
 	default:
 		return fmt.Errorf("安装 PHP 失败（Linux 需 apt/dnf/yum）")
 	}
-	return installLinuxPackages(spec)
+	if fbErr := runStackFallback(key); fbErr == nil {
+		return nil
+	}
+	return fmt.Errorf("安装 PHP 失败（已尝试 PPA/Remi 与 stack 脚本）")
 }
 
 func setupPHPDebianRepo() error {

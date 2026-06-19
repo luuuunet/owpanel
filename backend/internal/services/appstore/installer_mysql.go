@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/luuuunet/owpanel/internal/platform"
 	"github.com/luuuunet/owpanel/internal/services/settings"
 )
 
@@ -82,14 +83,40 @@ func installMySQLApt(version, installPath, dataDir string) error {
 	}
 
 	if err := setupMySQLAptRepo(version); err != nil {
-		return fmt.Errorf("配置 Oracle MySQL 官方源失败（Debian/Ubuntu 已移除 mysql-server 包，不能从默认源安装）: %w。建议改用软件商店中的 MariaDB，或检查网络/DNS 后重试", err)
+		if fbErr := installMariaDBFallback(version, err); fbErr == nil {
+			return nil
+		}
+		return fmt.Errorf("配置 Oracle MySQL 官方源失败（Debian/Ubuntu 已移除 mysql-server 包）: %w。建议改用软件商店中的 MariaDB，或检查网络能否访问 dev.mysql.com", err)
 	}
 
 	presetMySQLCommunityDebconf()
-	if err := aptInstallNonInteractive(pkgs...); err != nil {
+	if err := runAptInstall(pkgs...); err != nil {
+		if fbErr := installMariaDBFallback(version, err); fbErr == nil {
+			return nil
+		}
 		return fmt.Errorf("安装 MySQL %s: %w", version, err)
 	}
 	return startMySQLServiceLinux()
+}
+
+// installMariaDBFallback installs MariaDB when Oracle MySQL is unavailable on Debian-family systems.
+func installMariaDBFallback(version string, cause error) error {
+	if platform.Detect().OSFamily != "debian" && platform.Detect().OSFamily != "ubuntu" {
+		return cause
+	}
+	logInstallLine(fmt.Sprintf("MySQL %s 官方包安装失败 (%v)，尝试 MariaDB …", version, cause))
+	if err := runStackFallback("mariadb"); err == nil {
+		logInstallLine("已通过 stack 脚本安装 MariaDB（MySQL 兼容，Debian 推荐）")
+		return startMySQLService("mariadb")
+	}
+	if err := runAptGet("update", "-qq"); err != nil {
+		return cause
+	}
+	if err := runAptInstall("mariadb-server"); err != nil {
+		return cause
+	}
+	logInstallLine("已安装 MariaDB（MySQL 兼容，Debian 推荐）")
+	return startMySQLService("mariadb")
 }
 
 func installMySQLRpm(version string) error {
@@ -189,7 +216,10 @@ func mysqlAptRepoConfigured() bool {
 }
 
 func installMySQLAptPrereqs() error {
-	return aptInstallNonInteractive(
+	if err := runAptGet("update", "-qq"); err != nil {
+		return err
+	}
+	return runAptInstall(
 		"ca-certificates", "curl", "wget", "gnupg", "lsb-release",
 		"debconf", "debconf-utils", "apt-transport-https",
 	)
@@ -319,28 +349,7 @@ func installMySQLLegacyTarball(version, installPath, dataDir string) error {
 }
 
 func aptInstallNonInteractive(pkgs ...string) error {
-	args := append([]string{"install", "-y"}, pkgs...)
-	cmd := exec.Command("apt-get", args...)
-	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
-	logKey := installLogKeyForGoroutine()
-	logInstallLineKey(logKey, fmt.Sprintf("$ DEBIAN_FRONTEND=noninteractive apt-get %s", strings.Join(args, " ")))
-	out, err := cmd.CombinedOutput()
-	text := strings.TrimSpace(string(out))
-	if text != "" {
-		for _, line := range strings.Split(text, "\n") {
-			line = strings.TrimSpace(line)
-			if line != "" {
-				logInstallLineKey(logKey, line)
-			}
-		}
-	}
-	if err != nil {
-		if text != "" {
-			return fmt.Errorf("%v: %s", err, text)
-		}
-		return err
-	}
-	return nil
+	return runAptInstall(pkgs...)
 }
 
 func startMySQLService(svc string) error {

@@ -146,7 +146,7 @@ func runSystemInstall(key, version, installPath, dataDir string) error {
 
 	switch runtime.GOOS {
 	case "linux":
-		if err := installLinuxPackages(spec); err != nil {
+		if err := installLinuxPackagesWithFallback(key, spec); err != nil {
 			if isCriticalPackage(key) {
 				return fmt.Errorf("安装 %s 失败（Linux 需 apt/dnf/yum）: %w", key, err)
 			}
@@ -319,11 +319,10 @@ func installLinuxPackages(spec packageSpec) error {
 	mgr := detectLinuxPkgMgr()
 	switch mgr {
 	case "apt":
-		if err := runCommand("apt-get", "update", "-qq"); err != nil {
+		if err := runAptGet("update", "-qq"); err != nil {
 			return fmt.Errorf("apt update: %w", err)
 		}
-		args := append([]string{"install", "-y"}, pkgs...)
-		if err := runCommand("apt-get", args...); err != nil {
+		if err := runAptInstall(pkgs...); err != nil {
 			return fmt.Errorf("apt install: %w", err)
 		}
 		return nil
@@ -336,6 +335,39 @@ func installLinuxPackages(spec packageSpec) error {
 	default:
 		return fmt.Errorf("unsupported linux package manager (need apt/dnf/yum)")
 	}
+}
+
+func runAptGet(args ...string) error {
+	cmd := exec.Command("apt-get", args...)
+	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+	logKey := installLogKeyForGoroutine()
+	logInstallLineKey(logKey, fmt.Sprintf("$ DEBIAN_FRONTEND=noninteractive apt-get %s", strings.Join(args, " ")))
+	out, err := cmd.CombinedOutput()
+	text := strings.TrimSpace(string(out))
+	if text != "" {
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				logInstallLineKey(logKey, line)
+			}
+		}
+	}
+	if err != nil {
+		if text != "" {
+			return fmt.Errorf("%v: %s", err, text)
+		}
+		return err
+	}
+	return nil
+}
+
+func runAptInstall(pkgs ...string) error {
+	args := append([]string{
+		"install", "-y",
+		"-o", "Dpkg::Options::=--force-confdef",
+		"-o", "Dpkg::Options::=--force-confold",
+	}, pkgs...)
+	return runAptGet(args...)
 }
 
 func installWindowsPackages(spec packageSpec) error {
