@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/luuuunet/owpanel/internal/api/response"
 	"github.com/luuuunet/owpanel/internal/auth"
+	"github.com/luuuunet/owpanel/internal/bootstrap"
 	"github.com/luuuunet/owpanel/internal/config"
 	"github.com/luuuunet/owpanel/internal/middleware"
 	"github.com/luuuunet/owpanel/internal/models"
@@ -408,6 +409,7 @@ func (s *Server) Run() error {
 	go s.startLogCleanupLoop()
 	go s.startSiteExpiryLoop()
 	go s.startAutomationScheduler()
+	go bootstrap.Host(s.appstore, s.webserver, s.settings, s.cfg.DataDir)
 	s.emitExtension(extension.EventPanelStartup, map[string]interface{}{"version": "owpanel"})
 	return r.Run(addr)
 }

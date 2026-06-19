@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # OWPanel — universal Linux installer (Ubuntu / Debian / CentOS / Rocky / AlmaLinux / RHEL)
-# install.sh version: 2026-06-13-11
+# install.sh version: 2026-06-19-1
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/owpanel}"
 PORT="${OWPANEL_PORT:-8888}"
+# lnmp = Nginx + MariaDB + PHP + FTP + Certbot (recommended for new servers)
+# web  = Nginx + PHP only
+# none = panel only, no runtime stack
+INSTALL_STACK="${INSTALL_STACK:-lnmp}"
 INSTALL_NGINX="${INSTALL_NGINX:-1}"
 PANEL_USER="${PANEL_USER:-root}"
 FROM_SOURCE="${FROM_SOURCE:-0}"
@@ -51,18 +55,18 @@ detect_os() {
 }
 
 install_deps_minimal() {
-  log "安装基础依赖 (curl/tar)..."
+  log "安装基础依赖 (curl/git/sqlite/常用工具)..."
   case "$PKG" in
     apt)
       export DEBIAN_FRONTEND=noninteractive
       apt-get update -qq
-      apt-get install -y -qq curl ca-certificates tar
+      apt-get install -y -qq curl ca-certificates tar git unzip sqlite3 acl openssl sudo
       ;;
     dnf)
-      dnf install -y curl ca-certificates tar
+      dnf install -y curl ca-certificates tar git unzip sqlite acl openssl sudo
       ;;
     yum)
-      yum install -y curl ca-certificates tar
+      yum install -y curl ca-certificates tar git unzip sqlite acl openssl sudo
       ;;
   esac
 }
@@ -344,28 +348,31 @@ open_firewall() {
 
 install_web_server() {
   if [[ "${INSTALL_NGINX}" != "1" ]]; then
-    log "跳过 Nginx 安装 (INSTALL_NGINX=${INSTALL_NGINX})"
+    log "跳过 Nginx (INSTALL_NGINX=${INSTALL_NGINX})"
     return 0
   fi
-  if command -v nginx >/dev/null 2>&1; then
-    log "Nginx 已安装，跳过"
-    return 0
+  if ! command -v nginx >/dev/null 2>&1; then
+    log "安装 Nginx（网站托管 80 端口）..."
+    case "$PKG" in
+      apt)
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get install -y -qq nginx
+        ;;
+      dnf|yum)
+        $PKG install -y nginx
+        ;;
+      *)
+        log "当前包管理器不支持自动安装 Nginx"
+        return 0
+        ;;
+    esac
+  else
+    log "Nginx 已存在，配置 OWPanel 虚拟主机..."
   fi
-  log "安装 Nginx（网站托管需要 80 端口）..."
-  case "$PKG" in
-    apt)
-      export DEBIAN_FRONTEND=noninteractive
-      apt-get install -y -qq nginx
-      ;;
-    dnf|yum)
-      $PKG install -y nginx
-      ;;
-    *)
-      log "当前包管理器不支持自动安装 Nginx，请安装后在软件商店启动"
-      return 0
-      ;;
-  esac
+  configure_nginx_for_owpanel
+}
 
+configure_nginx_for_owpanel() {
   local data_dir="$INSTALL_DIR/data"
   local vhost_dir="$data_dir/nginx/vhosts"
   local panel_conf="$data_dir/nginx/owpanel.conf"
@@ -383,13 +390,124 @@ EOF
     [[ -f "$f" && ! -f "${f}.owpanel-disabled" ]] && mv "$f" "${f}.owpanel-disabled" || true
   done
 
-  if nginx -t >/dev/null 2>&1; then
+  if command -v nginx >/dev/null 2>&1 && nginx -t >/dev/null 2>&1; then
     systemctl enable nginx >/dev/null 2>&1 || true
     systemctl restart nginx >/dev/null 2>&1 || true
-    log "Nginx 已安装并启动（80 端口）"
+    log "Nginx 已就绪（80 端口）"
   else
-    log "Nginx 已安装，但配置测试未通过，请在面板软件商店中检查"
+    log "Nginx 配置需检查，请登录面板 → 软件商店"
   fi
+}
+
+install_php() {
+  log "安装 PHP-FPM（PHP 站点必需）..."
+  local svc=""
+  case "$PKG" in
+    apt)
+      export DEBIAN_FRONTEND=noninteractive
+      local pkgs=()
+      if apt-cache show php8.3-fpm >/dev/null 2>&1; then
+        pkgs=(php8.3-fpm php8.3-mysql php8.3-cli php8.3-common php8.3-xml php8.3-curl php8.3-mbstring php8.3-gd php8.3-zip)
+        svc=php8.3-fpm
+      elif apt-cache show php8.2-fpm >/dev/null 2>&1; then
+        pkgs=(php8.2-fpm php8.2-mysql php8.2-cli php8.2-common php8.2-xml php8.2-curl php8.2-mbstring php8.2-gd php8.2-zip)
+        svc=php8.2-fpm
+      else
+        pkgs=(php-fpm php-mysql php-cli php-xml php-curl php-mbstring php-gd php-zip)
+        svc=php-fpm
+      fi
+      apt-get install -y -qq "${pkgs[@]}"
+      ;;
+    dnf|yum)
+      $PKG install -y php-fpm php-mysqlnd php-cli php-xml php-mbstring php-gd php-zip
+      svc=php-fpm
+      ;;
+    *)
+      log "跳过 PHP（不支持的包管理器）"
+      return 0
+      ;;
+  esac
+  if [[ -n "$svc" ]] && systemctl list-unit-files "${svc}.service" >/dev/null 2>&1; then
+    systemctl enable "$svc" >/dev/null 2>&1 || true
+    systemctl start "$svc" >/dev/null 2>&1 || true
+    log "PHP-FPM 已启动 ($svc)"
+  fi
+}
+
+install_database() {
+  log "安装 MariaDB/MySQL（建站数据库）..."
+  case "$PKG" in
+    apt)
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get install -y -qq mariadb-server 2>/dev/null \
+        || apt-get install -y -qq default-mysql-server 2>/dev/null \
+        || apt-get install -y -qq mysql-server
+      ;;
+    dnf|yum)
+      $PKG install -y mariadb-server 2>/dev/null || $PKG install -y mysql-server
+      ;;
+  esac
+  for svc in mariadb mysql mysqld; do
+    if systemctl list-unit-files "${svc}.service" >/dev/null 2>&1; then
+      systemctl enable "$svc" >/dev/null 2>&1 || true
+      systemctl start "$svc" >/dev/null 2>&1 || true
+      log "数据库服务已启动 ($svc)"
+      return 0
+    fi
+  done
+}
+
+install_ftp() {
+  log "安装 Pure-FTPd（建站 FTP）..."
+  case "$PKG" in
+    apt)
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get install -y -qq pure-ftpd
+      ;;
+    dnf|yum)
+      $PKG install -y pure-ftpd
+      ;;
+  esac
+  if systemctl list-unit-files pure-ftpd.service >/dev/null 2>&1; then
+    systemctl enable pure-ftpd >/dev/null 2>&1 || true
+    systemctl start pure-ftpd >/dev/null 2>&1 || true
+    log "Pure-FTPd 已启动"
+  fi
+}
+
+install_certbot() {
+  log "安装 Certbot（免费 SSL）..."
+  case "$PKG" in
+    apt)
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get install -y -qq certbot python3-certbot-nginx 2>/dev/null || apt-get install -y -qq certbot
+      ;;
+    dnf|yum)
+      $PKG install -y certbot python3-certbot-nginx 2>/dev/null || $PKG install -y certbot
+      ;;
+  esac
+}
+
+install_runtime_stack() {
+  local stack
+  stack="$(echo "${INSTALL_STACK}" | tr '[:upper:]' '[:lower:]')"
+  case "$stack" in
+    none|0|skip)
+      log "跳过运行环境安装 (INSTALL_STACK=${INSTALL_STACK})"
+      return 0
+      ;;
+    web)
+      install_web_server
+      install_php
+      ;;
+    lnmp|*)
+      install_web_server
+      install_php
+      install_database
+      install_ftp
+      install_certbot
+      ;;
+  esac
 }
 
 read_admin_credentials() {
@@ -451,18 +569,22 @@ print_install_summary() {
   echo "    op uninstall  Remove panel service and files (sudo)"
   echo ""
   echo "  Change your password after first login."
+  echo ""
+  echo "  Runtime stack (${INSTALL_STACK}):"
+  command -v nginx >/dev/null 2>&1 && echo "    Nginx:    running on port 80" || echo "    Nginx:    not installed"
+  systemctl is-active php8.3-fpm php8.2-fpm php-fpm 2>/dev/null | grep -q active && echo "    PHP-FPM:  active" || echo "    PHP-FPM:  check Software Store"
+  systemctl is-active mariadb mysql mysqld 2>/dev/null | grep -q active && echo "    Database: active" || echo "    Database: optional / not running"
   if command -v nginx >/dev/null 2>&1; then
-    echo "  Websites:   http://${ip}/  (Nginx on port 80)"
-  else
-    echo "  Tip: Install Nginx from Software Store before creating websites."
+    echo "  Websites:   http://${ip}/"
   fi
+  echo "  Tip: INSTALL_STACK=web|lnmp|none  —  lighter install: INSTALL_STACK=web"
   echo "========================================="
 }
 
 main() {
   echo "========================================="
   echo "  OWPanel Linux Installer"
-  echo "  installer: 2026-06-13-8"
+  echo "  installer: 2026-06-19-1 (stack: ${INSTALL_STACK})"
   echo "========================================="
   require_root
   detect_os
@@ -479,7 +601,7 @@ main() {
   fi
   install_binary_layout
   write_systemd
-  install_web_server
+  install_runtime_stack
   open_firewall
   print_install_summary
 }
