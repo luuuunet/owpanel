@@ -8,12 +8,11 @@ PORT="${OWPANEL_PORT:-8888}"
 PANEL_USER="${PANEL_USER:-root}"
 FROM_SOURCE="${FROM_SOURCE:-0}"
 REPO_URL="${REPO_URL:-https://github.com/luuuunet/owpanel.git}"
-SOURCE_REF="${SOURCE_REF:-v0.1.1}"
-RELEASE_VERSION="${RELEASE_VERSION:-v0.1.10}"
+SOURCE_REF="${SOURCE_REF:-main}"
+RELEASE_VERSION="${RELEASE_VERSION:-v0.1.11}"
 RELEASE_DIR="${RELEASE_DIR:-}"
 
 export GIT_TERMINAL_PROMPT=0
-export GOTOOLCHAIN=local
 
 log() { echo "[owpanel] $*"; }
 die() { echo "[owpanel] ERROR: $*" >&2; exit 1; }
@@ -84,7 +83,16 @@ install_build_deps() {
 }
 
 install_go_if_needed() {
-  if command -v go >/dev/null 2>&1; then
+  go_version_ok() {
+    command -v go >/dev/null 2>&1 || return 1
+    local ver maj min
+    ver="$(go version 2>/dev/null | grep -oE 'go[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 | sed 's/^go//')"
+    [[ -n "$ver" ]] || return 1
+    maj="${ver%%.*}"
+    min="${ver#*.}"; min="${min%%.*}"
+    [[ "$maj" -gt 1 ]] || { [[ "$maj" -eq 1 ]] && [[ "$min" -ge 22 ]]; }
+  }
+  if go_version_ok; then
     export PATH="$(dirname "$(command -v go)"):$PATH"
     return
   fi
@@ -191,7 +199,7 @@ build_from_source() {
     SRC="$WORK/src"
   fi
   export PATH="/usr/local/go/bin:/usr/local/bin:$PATH"
-  export GOTOOLCHAIN=local
+  export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
   export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=768}"
   log "编译后端..."
   cd "$SRC/backend"
@@ -281,33 +289,43 @@ release_package_name() {
 
 install_from_github_release() {
   [[ "$FROM_SOURCE" == "1" ]] && return 1
-  local slug pkg ver url tgz tmpdir
+  local slug pkg ver url tgz tmpdir versions v
   slug="$(repo_slug)"
   pkg="$(release_package_name)"
-  ver="$RELEASE_VERSION"
-  url="https://github.com/${slug}/releases/download/${ver}/${pkg}.tar.gz"
-  tgz="$(mktemp /tmp/owpanel-rel.XXXXXX.tar.gz)"
-  log "快速安装：下载预编译包 ${ver} (${pkg})..."
-  if ! curl -fL --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 5 \
-      --progress-bar -o "$tgz" "$url"; then
-    rm -f "$tgz"
-    log "预编译包不可用 (${ver})，将尝试源码构建..."
-    return 1
+  versions=("$RELEASE_VERSION")
+  v="$(curl -fsSL --connect-timeout 10 --max-time 20 \
+    "https://api.github.com/repos/${slug}/releases/latest" 2>/dev/null \
+    | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v[^"]+"' \
+    | head -1 | grep -oE 'v[^"]+' || true)"
+  if [[ -n "$v" && "$v" != "$RELEASE_VERSION" ]]; then
+    versions+=("$v")
   fi
-  log "解压预编译包 ($(du -h "$tgz" | awk '{print $1}'))..."
-  tmpdir="$(mktemp -d)"
-  tar -xzf "$tgz" -C "$tmpdir"
-  rm -f "$tgz"
-  local root="$tmpdir/$pkg"
-  [[ -d "$root" ]] || root="$tmpdir"
-  [[ -f "$root/owpanel" && -d "$root/web" ]] || die "预编译包格式错误"
-  cp -f "$root/owpanel" "$INSTALL_DIR/owpanel"
-  cp -f "$root/op" "$INSTALL_DIR/op" 2>/dev/null || true
-  rm -rf "$INSTALL_DIR/web"
-  cp -a "$root/web" "$INSTALL_DIR/web"
-  rm -rf "$tmpdir"
-  log "预编译包安装完成（约 1–2 分钟）"
-  return 0
+  for ver in "${versions[@]}"; do
+    url="https://github.com/${slug}/releases/download/${ver}/${pkg}.tar.gz"
+    tgz="$(mktemp /tmp/owpanel-rel.XXXXXX.tar.gz)"
+    log "快速安装：下载预编译包 ${ver} (${pkg})..."
+    if curl -fL --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 5 \
+        --progress-bar -o "$tgz" "$url"; then
+      log "解压预编译包 ($(du -h "$tgz" | awk '{print $1}'))..."
+      tmpdir="$(mktemp -d)"
+      tar -xzf "$tgz" -C "$tmpdir"
+      rm -f "$tgz"
+      local root="$tmpdir/$pkg"
+      [[ -d "$root" ]] || root="$tmpdir"
+      [[ -f "$root/owpanel" && -d "$root/web" ]] || die "预编译包格式错误"
+      cp -f "$root/owpanel" "$INSTALL_DIR/owpanel"
+      cp -f "$root/op" "$INSTALL_DIR/op" 2>/dev/null || true
+      rm -rf "$INSTALL_DIR/web"
+      cp -a "$root/web" "$INSTALL_DIR/web"
+      rm -rf "$tmpdir"
+      log "预编译包安装完成（约 1–2 分钟）"
+      return 0
+    fi
+    rm -f "$tgz"
+    log "预编译包不可用 (${ver})，尝试下一版本..."
+  done
+  log "无可用预编译包，将尝试源码构建..."
+  return 1
 }
 
 open_firewall() {
