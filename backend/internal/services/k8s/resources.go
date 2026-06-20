@@ -40,6 +40,9 @@ type NamespaceRow struct {
 }
 
 func (s *Service) ListNodes() ([]NodeRow, error) {
+	if !s.clusterListReady() {
+		return []NodeRow{}, nil
+	}
 	out, err := s.kubectl("get", "nodes", "-o", "json")
 	if err != nil {
 		return nil, err
@@ -94,6 +97,9 @@ func (s *Service) ListNodes() ([]NodeRow, error) {
 }
 
 func (s *Service) ListPods() ([]PodRow, error) {
+	if !s.clusterListReady() {
+		return []PodRow{}, nil
+	}
 	out, err := s.kubectl("get", "pods", "-A", "-o", "json")
 	if err != nil {
 		return nil, err
@@ -143,6 +149,9 @@ func (s *Service) ListPods() ([]PodRow, error) {
 }
 
 func (s *Service) ListDeployments() ([]DeploymentRow, error) {
+	if !s.clusterListReady() {
+		return []DeploymentRow{}, nil
+	}
 	out, err := s.kubectl("get", "deployments", "-A", "-o", "json")
 	if err != nil {
 		return nil, err
@@ -184,6 +193,9 @@ func (s *Service) ListDeployments() ([]DeploymentRow, error) {
 }
 
 func (s *Service) ListNamespaces() ([]NamespaceRow, error) {
+	if !s.clusterListReady() {
+		return []NamespaceRow{}, nil
+	}
 	out, err := s.kubectl("get", "namespaces", "-o", "json")
 	if err != nil {
 		return nil, err

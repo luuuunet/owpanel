@@ -106,7 +106,7 @@ func (s *Service) ChatStream(messages []Message, onChunk StreamChunkHandler) err
 			continue
 		}
 		if chunk.Error != nil && chunk.Error.Message != "" {
-			return fmt.Errorf(chunk.Error.Message)
+			return fmt.Errorf("%s", chunk.Error.Message)
 		}
 		if len(chunk.Choices) == 0 {
 			continue

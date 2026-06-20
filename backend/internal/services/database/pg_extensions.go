@@ -49,7 +49,7 @@ func (s *Service) PostgreSQLStatus() PostgreSQLStatus {
 
 func (s *Service) ListPgExtensionCatalog(databaseName string) (*PgExtensionDetail, error) {
 	if _, err := findBinary("psql"); err != nil {
-		return nil, fmt.Errorf("PostgreSQL 客户端未安装")
+		return &PgExtensionDetail{Extensions: []PgExtensionInfo{}}, nil
 	}
 	ver, _ := s.pgServerVersion()
 	available, err := s.pgAvailableExtensions()

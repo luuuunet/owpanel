@@ -475,7 +475,10 @@ func (s *Service) ListPHPVersions() []PHPVersionInfo {
 func (s *Service) Get(key string) (*models.App, error) {
 	var app models.App
 	if err := s.db.Where("app_key = ?", key).First(&app).Error; err != nil {
-		return nil, err
+		s.ensureCatalog()
+		if err2 := s.db.Where("app_key = ?", key).First(&app).Error; err2 != nil {
+			return nil, err2
+		}
 	}
 	return &app, nil
 }

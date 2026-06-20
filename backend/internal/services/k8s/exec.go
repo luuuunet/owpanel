@@ -10,6 +10,16 @@ import (
 	"github.com/luuuunet/owpanel/internal/services/appstore"
 )
 
+func (s *Service) clusterListReady() bool {
+	if !s.linuxHost() {
+		return false
+	}
+	if s.ClusterMode() == ModeStandard {
+		return s.kubeconfigExists() && s.clusterConnected()
+	}
+	return appstore.K3sRunning()
+}
+
 func (s *Service) kubectl(args ...string) (string, error) {
 	if !s.linuxHost() {
 		return "", fmt.Errorf("K8s 需要 Linux 服务器")

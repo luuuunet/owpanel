@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/luuuunet/owpanel/internal/services/appstore"
 )
 
 type PolicyItem struct {
@@ -16,6 +18,9 @@ type PolicyItem struct {
 }
 
 func (s *Service) ListPolicies() ([]PolicyItem, error) {
+	if !appstore.K3sRunning() {
+		return []PolicyItem{}, nil
+	}
 	var items []PolicyItem
 	for _, spec := range []struct {
 		kind  string

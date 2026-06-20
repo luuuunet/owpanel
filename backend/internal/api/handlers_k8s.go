@@ -41,7 +41,19 @@ func (s *Server) handleK8sStatus(c *gin.Context) {
 func (s *Server) handleK8sJoinInfo(c *gin.Context) {
 	info, err := s.k8s.JoinInfo()
 	if err != nil {
-		response.Error(c, 500, err.Error())
+		st, _ := s.k8s.Status()
+		hint := err.Error()
+		if st != nil && st.Hint != "" {
+			hint = st.Hint
+		}
+		response.OK(c, gin.H{
+			"ready":      false,
+			"hint":       hint,
+			"server_url": "",
+			"token":      "",
+			"commands":   gin.H{},
+			"script":     "",
+		})
 		return
 	}
 	response.OK(c, info)

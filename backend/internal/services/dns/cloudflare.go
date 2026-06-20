@@ -65,7 +65,7 @@ func (c *cloudflareClient) ListZones(ctx context.Context, account *models.DNSPro
 		}
 		if !out.Success {
 			if len(out.Errors) > 0 {
-				return nil, fmt.Errorf(out.Errors[0].Message)
+				return nil, fmt.Errorf("%s", out.Errors[0].Message)
 			}
 			return nil, fmt.Errorf("cloudflare list zones failed")
 		}

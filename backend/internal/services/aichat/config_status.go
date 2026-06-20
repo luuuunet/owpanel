@@ -42,7 +42,7 @@ func (s *Service) EnsureConfigured() error {
 		return nil
 	}
 	if st.Message != "" {
-		return fmt.Errorf(st.Message)
+		return fmt.Errorf("%s", st.Message)
 	}
 	return fmt.Errorf("AI 助手未配置，请前往面板设置绑定 API")
 }
