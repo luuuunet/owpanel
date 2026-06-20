@@ -69,6 +69,12 @@ func (s *Service) postDeploySteps(ctx bootstrapContext, appendLog func(string)) 
 		}
 	}
 
+	if ctx.plan.ProjectType == "rust" && s.runtime != nil {
+		if err := s.setupRustRuntime(ctx, appendLog); err != nil {
+			appendLog("Rust 运行环境: " + err.Error())
+		}
+	}
+
 	return nil
 }
 
@@ -289,6 +295,67 @@ func (s *Service) setupNodePM2(ctx bootstrapContext, appendLog func(string)) err
 	}
 	appendLog(fmt.Sprintf("Node PM2 已启动，端口 %d，Nginx 已反代", port))
 	return nil
+}
+
+func (s *Service) setupRustRuntime(ctx bootstrapContext, appendLog func(string)) error {
+	port := ctx.plan.NodePort
+	if port <= 0 {
+		port = 32000 + int(ctx.site.ID%500)
+	}
+	name := strings.ReplaceAll(ctx.plan.Domain, ".", "-")
+	root := ctx.site.RootPath
+	binName := rustBinaryName(root)
+	script := "./target/release/" + binName
+	portsJSON := fmt.Sprintf(`[{"host_port":%d,"container_port":%d,"protocol":"tcp"}]`, port, port)
+	proj := &models.RuntimeProject{
+		Kind:          "rust",
+		Name:          name,
+		Path:          root,
+		Version:       "1.84",
+		RunScript:     script,
+		ExternalPort:  port,
+		Ports:         portsJSON,
+		Status:        "stopped",
+		Remark:        "AI GitHub bootstrap",
+	}
+	if err := s.runtime.Create(proj); err != nil {
+		return err
+	}
+	if err := s.runtime.Toggle(proj.ID, "running", "", 0); err != nil {
+		return err
+	}
+	proxy := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_, err := s.website.UpdateSite(ctx.site.ID, &website.UpdateRequest{ProxyPass: &proxy})
+	if err != nil {
+		return err
+	}
+	appendLog(fmt.Sprintf("Rust 应用已启动，端口 %d，Nginx 已反代", port))
+	return nil
+}
+
+func rustBinaryName(root string) string {
+	data, err := os.ReadFile(filepath.Join(root, "Cargo.toml"))
+	if err != nil {
+		return "app"
+	}
+	inPackage := false
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "[package]" {
+			inPackage = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			inPackage = false
+		}
+		if inPackage && strings.HasPrefix(line, "name = ") {
+			name := strings.Trim(strings.TrimPrefix(line, "name = "), `"'`)
+			if name != "" {
+				return name
+			}
+		}
+	}
+	return "app"
 }
 
 func (s *Service) rollbackSite(siteID uint, appendLog func(string)) {

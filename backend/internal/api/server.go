@@ -278,7 +278,8 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 	devopsSvc := devops.NewService(db, cfg.DataDir, composeSvc, wsMgr, appSvc, settingsSvc)
 	aihubSvc := aihub.NewService(cfg.DataDir, appSvc, settingsSvc)
 	aichatSvc := aichat.NewService(settingsSvc)
-	aisiteSvc := aisite.NewService(db, cfg.DataDir, websiteSvc, devopsSvc, aichatSvc, appSvc, settingsSvc, nodejs.NewService(db, cfg.DataDir), cronSvc)
+	runtimeSvc := runtime.NewService(db, cfg.DataDir)
+	aisiteSvc := aisite.NewService(db, cfg.DataDir, websiteSvc, devopsSvc, aichatSvc, appSvc, settingsSvc, nodejs.NewService(db, cfg.DataDir), runtimeSvc, cronSvc)
 	extReg := extension.NewRegistry(cfg.DataDir)
 	appstore.SetExtensionCatalogLoader(func() []models.App { return extReg.CatalogApps() })
 	sshSvc := sshmgr.NewService(db)
@@ -359,7 +360,7 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 		wordpress: wpSvc,
 		nodejs:    nodejs.NewService(db, cfg.DataDir),
 		java:      java.NewService(db, cfg.DataDir),
-		runtime:   runtime.NewService(db, cfg.DataDir),
+		runtime:   runtimeSvc,
 		security:   securitySvc,
 		kafkaaccel: kafkaaccel.NewService(db, appSvc),
 		cilium:     cilium.NewService(db, appSvc, cfg.DataDir),

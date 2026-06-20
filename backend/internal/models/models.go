@@ -772,7 +772,7 @@ type RuntimeProject struct {
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
-	Kind          string         `gorm:"size:16;index" json:"kind"` // php|java|nodejs|go|python|dotnet
+	Kind          string         `gorm:"size:16;index" json:"kind"` // php|java|nodejs|go|python|dotnet|rust
 	Name          string         `gorm:"size:128" json:"name"`
 	Path          string         `gorm:"size:512" json:"path"`
 	Version       string         `gorm:"size:16" json:"version"`

@@ -92,6 +92,14 @@ var catalog = []catalogItem{
 		defaultConfig: map[string]interface{}{"version": "3.11"},
 	},
 	{
+		App: models.App{Key: "rust184", Name: "Rust 1.84", Category: "运行环境", Versions: "1.84", Version: "1.84", Description: "Rust 1.84 工具链（rustc/cargo，适用于 Actix/Axum 等 Web 服务）", Port: 0, InstallPath: "server/rust/184", ConfigPath: "", Icon: "Platform"},
+		defaultConfig: map[string]interface{}{"version": "1.84"},
+	},
+	{
+		App: models.App{Key: "rust183", Name: "Rust 1.83", Category: "运行环境", Versions: "1.83", Version: "1.83", Description: "Rust 1.83 工具链（rustc/cargo）", Port: 0, InstallPath: "server/rust/183", ConfigPath: "", Icon: "Platform"},
+		defaultConfig: map[string]interface{}{"version": "1.83"},
+	},
+	{
 		App: models.App{Key: "dotnet10", Name: ".NET 10", Category: "运行环境", Versions: "10.0", Version: "10.0", Description: ".NET 10 运行时（ASP.NET Core）", Port: 0, InstallPath: "server/dotnet/10", ConfigPath: "", Icon: "Platform"},
 		defaultConfig: map[string]interface{}{"version": "10.0"},
 	},
@@ -754,6 +762,9 @@ func (s *Service) detectAppStatus(key string) string {
 	}
 	if strings.HasPrefix(key, "nodejs") {
 		return detectNodeStatusForInstall(key, s.dataDir)
+	}
+	if strings.HasPrefix(key, "rust") && key != "rustfs" && key != "rustdesk" {
+		return detectRustStatus(key, s.dataDir)
 	}
 	if key == "pm2" {
 		if fileExists(filepath.Join(s.dataDir, "server", "pm2", ".owpanel-installed")) {

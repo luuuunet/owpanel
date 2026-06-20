@@ -97,6 +97,16 @@ var storeFamilies = []storeFamilyDef{
 		sortVersion: func(a, b StoreVersionEntry) bool { return versionNumDesc(a.Version, b.Version) },
 	},
 	{
+		Key: "rust", Name: "Rust", NameEN: "Rust",
+		Description:   "Rust 工具链（rustc/cargo），可安装多个稳定版本，适合高性能 Web 服务",
+		DescriptionEN: "Rust toolchain (rustc/cargo) — multiple stable versions for high-performance web apps",
+		Category: "运行环境", Icon: "Platform",
+		match: func(key string) bool {
+			return strings.HasPrefix(key, "rust") && key != "rustfs" && key != "rustdesk"
+		},
+		sortVersion: func(a, b StoreVersionEntry) bool { return versionNumDesc(a.Version, b.Version) },
+	},
+	{
 		Key: "dotnet", Name: ".NET", NameEN: ".NET",
 		Description:   ".NET 运行时（ASP.NET Core）",
 		DescriptionEN: ".NET runtime (ASP.NET Core)",

@@ -114,6 +114,9 @@ func runSystemInstall(key, version, installPath, dataDir string) error {
 	if ok, err := tryAIInstall(key, version, installPath, dataDir); ok {
 		return err
 	}
+	if ok, err := tryRustInstall(key, version, installPath, dataDir); ok {
+		return err
+	}
 	if ok, err := tryRuntimeInstall(key, version, installPath, dataDir); ok {
 		return err
 	}

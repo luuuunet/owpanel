@@ -2,6 +2,7 @@ package aisite
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -173,6 +174,46 @@ func (snap *RepoSnapshot) suggestedNodeAppKey() string {
 	default:
 		return "nodejs20"
 	}
+}
+
+// suggestedRustAppKey returns appstore rust key (rust184, rust183).
+func (snap *RepoSnapshot) suggestedRustAppKey() string {
+	if snap == nil {
+		return "rust184"
+	}
+	if v := parseRustToolchainVersion(filepath.Join(snap.ClonePath, "rust-toolchain.toml")); v != "" {
+		return rustAppKeyFromVersion(v)
+	}
+	return "rust184"
+}
+
+func rustAppKeyFromVersion(v string) string {
+	v = strings.TrimSpace(strings.TrimPrefix(v, "v"))
+	parts := strings.Split(v, ".")
+	if len(parts) >= 2 {
+		return "rust" + parts[0] + parts[1]
+	}
+	return "rust184"
+}
+
+func parseRustToolchainVersion(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "channel") {
+			// channel = "1.84.0"
+			if idx := strings.Index(line, `"`); idx >= 0 {
+				rest := line[idx+1:]
+				if end := strings.Index(rest, `"`); end >= 0 {
+					return rest[:end]
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // applyRepoEnvHints adjusts deploy plan from clone analysis (deterministic, not AI).

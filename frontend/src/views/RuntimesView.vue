@@ -10,7 +10,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-const tabs = ['php', 'java', 'nodejs', 'go', 'python', 'dotnet'] as const
+const tabs = ['php', 'java', 'nodejs', 'go', 'rust', 'python', 'dotnet'] as const
 type RuntimeKind = (typeof tabs)[number]
 
 const activeTab = ref<RuntimeKind>('dotnet')
@@ -54,6 +54,7 @@ const runScriptPlaceholder = computed(() => {
     nodejs: 'node index.js',
     python: 'python app.py',
     go: './app',
+    rust: './target/release/app',
     java: 'java -jar app.jar',
     php: 'php-fpm',
   }

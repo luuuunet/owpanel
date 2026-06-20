@@ -18,6 +18,7 @@ type RepoSnapshot struct {
 	Branch        string   `json:"branch"`
 	ClonePath     string   `json:"-"`
 	FileList      []string `json:"file_list"`
+	HasCargo       bool     `json:"has_cargo"`
 	HasComposer   bool     `json:"has_composer"`
 	HasPackageJSON bool    `json:"has_package_json"`
 	HasDockerfile bool     `json:"has_dockerfile"`
@@ -103,6 +104,7 @@ func (s *Service) fetchRepoSnapshot(repoURL, branch, token string) (*RepoSnapsho
 	snap.FileList = listTopFiles(tmp, 80)
 	snap.ComposerJSON = readTrunc(filepath.Join(tmp, "composer.json"), 4000)
 	snap.PackageJSON = readTrunc(filepath.Join(tmp, "package.json"), 4000)
+	snap.HasCargo = fileExists(filepath.Join(tmp, "Cargo.toml"))
 	snap.Dockerfile = readTrunc(filepath.Join(tmp, "Dockerfile"), 3000)
 	snap.Readme = readTrunc(firstExisting(tmp, "README.md", "readme.md", "README.MD"), 5000)
 	snap.HasComposer = snap.ComposerJSON != ""
@@ -300,6 +302,8 @@ func detectFramework(s *RepoSnapshot) string {
 	switch {
 	case s.HasArtisan || strings.Contains(c, "laravel/framework"):
 		return "laravel"
+	case s.HasCargo:
+		return "rust"
 	case s.HasDockerCompose || s.HasDockerfile:
 		return "docker"
 	case strings.Contains(c, "symfony/framework"):

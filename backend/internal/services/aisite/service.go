@@ -6,6 +6,7 @@ import (
 	"github.com/luuuunet/owpanel/internal/services/cron"
 	"github.com/luuuunet/owpanel/internal/services/devops"
 	"github.com/luuuunet/owpanel/internal/services/nodejs"
+	"github.com/luuuunet/owpanel/internal/services/runtime"
 	"github.com/luuuunet/owpanel/internal/services/settings"
 	"github.com/luuuunet/owpanel/internal/services/website"
 	"gorm.io/gorm"
@@ -20,6 +21,7 @@ type Service struct {
 	appstore *appstore.Service
 	settings *settings.Service
 	nodejs   *nodejs.Service
+	runtime  *runtime.Service
 	cron     *cron.Service
 }
 
@@ -32,6 +34,7 @@ func NewService(
 	appSvc *appstore.Service,
 	settingsSvc *settings.Service,
 	nodejsSvc *nodejs.Service,
+	runtimeSvc *runtime.Service,
 	cronSvc *cron.Service,
 ) *Service {
 	return &Service{
@@ -43,6 +46,7 @@ func NewService(
 		appstore: appSvc,
 		settings: settingsSvc,
 		nodejs:   nodejsSvc,
+		runtime:  runtimeSvc,
 		cron:     cronSvc,
 	}
 }

@@ -139,7 +139,11 @@ OWPanel 是开源 Linux 服务器运维管理面板，提供 Web 界面统一管
 
 路径：**网站 → 运行环境**
 
-管理 Node.js、Java 等应用运行时与项目部署。
+管理 Node.js、Java、Go、**Rust**、Python、.NET 等应用运行时与项目部署。
+
+- **Rust**：软件商店安装 `rustc/cargo`，运行环境页创建项目，`cargo build --release` 后通过 PM2 或 Docker 运行，Nginx 反代。详见 [RUST.md](./RUST.md)
+- **Go / Python / .NET**：可选 Docker 容器或 PM2
+- **Node.js**：PM2 进程守护
 
 ### 4.4 SSL 证书
 

@@ -12,6 +12,8 @@ var catalogDescriptionsEN = map[string]string{
 	"redis":           "Redis in-memory cache and data store",
 	"mongodb":         "MongoDB document database",
 	"python":          "Python runtime environment",
+	"rust184":         "Rust 1.84 toolchain (rustc/cargo) for Actix, Axum, and other web frameworks",
+	"rust183":         "Rust 1.83 toolchain (rustc/cargo)",
 	"pureftpd":        "Pure-FTPd FTP server",
 	"mail-server":     "Postfix + Dovecot mail stack (SMTP + IMAP/POP3)",
 	"phpmyadmin":      "Web-based MySQL administration",

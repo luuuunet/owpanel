@@ -18,6 +18,7 @@ var versionOptions = map[string][]string{
 	"java":   {"21", "17", "11", "8"},
 	"nodejs": {"22", "20", "18"},
 	"go":     {"1.23", "1.22", "1.21"},
+	"rust":   {"1.84", "1.83", "1.82"},
 	"python": {"3.12", "3.11", "3.10"},
 	"dotnet": {"10.0", "9.0", "8.0"},
 }
@@ -289,7 +290,7 @@ func (s *Service) useDocker(p *models.RuntimeProject) bool {
 		return false
 	}
 	switch p.Kind {
-	case "dotnet", "python", "go":
+	case "dotnet", "python", "go", "rust":
 		return true
 	case "java":
 		return strings.TrimSpace(p.RunScript) != ""
@@ -303,7 +304,7 @@ func (s *Service) startPM2(p *models.RuntimeProject) error {
 		return fmt.Errorf("PM2 未安装，请先在软件商店安装 PM2")
 	}
 	script := strings.TrimSpace(p.RunScript)
-	shell := script != "" && (strings.Contains(script, " ") || p.Kind == "dotnet" || p.Kind == "python" || p.Kind == "go")
+	shell := script != "" && (strings.Contains(script, " ") || p.Kind == "dotnet" || p.Kind == "python" || p.Kind == "go" || p.Kind == "rust")
 	env := parseEnv(p.EnvVars)
 	if p.ExternalPort > 0 {
 		if env == nil {
@@ -375,6 +376,8 @@ func (s *Service) startDocker(p *models.RuntimeProject) error {
 			script = "python app.py"
 		case "go":
 			script = "./app"
+		case "rust":
+			script = "cargo build --release && ./target/release/app"
 		default:
 			script = "sh"
 		}
@@ -439,6 +442,11 @@ func (s *Service) dockerImage(kind, version string) string {
 			version = "1.23"
 		}
 		return "golang:" + version
+	case "rust":
+		if version == "" {
+			version = "1.84"
+		}
+		return "rust:" + version
 	case "java":
 		if version == "" {
 			version = "17"

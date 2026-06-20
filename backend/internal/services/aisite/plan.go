@@ -330,6 +330,8 @@ func mapFrameworkType(fw string) string {
 		return "php"
 	case "nodejs":
 		return "node"
+	case "rust":
+		return "rust"
 	default:
 		return "static"
 	}
@@ -383,6 +385,12 @@ func heuristicPlan(dataDir string, snap *RepoSnapshot, panel PanelContext, domai
 		plan.PhpVersion = "static"
 		plan.UsePM2 = true
 		plan.Summary = "Node 服务：clone 后 npm install，PM2 常驻 + Nginx 反代"
+	case "rust":
+		plan.ProjectType = "rust"
+		plan.PhpVersion = "static"
+		plan.UsePM2 = true
+		plan.DeployScript = rustDeployScript()
+		plan.Summary = "Rust 项目：cargo build --release，PM2 运行 + Nginx 反代"
 	}
 	if snap.HasNodeServer && !plan.UseDocker {
 		plan.ProjectType = "node"

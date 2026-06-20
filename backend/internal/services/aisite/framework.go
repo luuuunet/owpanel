@@ -24,6 +24,9 @@ func resolveFramework(plan DeployPlan, snap *RepoSnapshot) string {
 	if snap.HasNodeServer {
 		return "nodejs"
 	}
+	if snap.HasCargo {
+		return "rust"
+	}
 	if snap.HasPackageJSON && !snap.HasComposer {
 		return "static"
 	}
@@ -35,7 +38,7 @@ func resolveFramework(plan DeployPlan, snap *RepoSnapshot) string {
 
 func hasKnownDeployTemplate(fw string) bool {
 	switch fw {
-	case "laravel", "wordpress", "symfony", "php", "nextjs", "vue", "react", "nodejs", "docker":
+	case "laravel", "wordpress", "symfony", "php", "nextjs", "vue", "react", "nodejs", "rust", "docker":
 		return true
 	default:
 		return false
@@ -101,6 +104,12 @@ func applyFrameworkDefaults(plan *DeployPlan, snap *RepoSnapshot, dataDir string
 		plan.UsePM2 = true
 		plan.DeployScript = nodeServiceDeployScript(snap)
 		plan.Summary = "Node 服务：npm 安装 + PM2 常驻 + Nginx 反代"
+	case "rust":
+		plan.ProjectType = "rust"
+		plan.PhpVersion = "static"
+		plan.UsePM2 = true
+		plan.DeployScript = rustDeployScript()
+		plan.Summary = "Rust 项目：cargo build --release，PM2/Docker 运行 + Nginx 反代"
 	case "docker":
 		plan.UseDocker = true
 		plan.ProjectType = "docker"
@@ -143,6 +152,13 @@ func snapSuggestedPHP(snap *RepoSnapshot, fallback string) string {
 	return fallback
 }
 
+func snapSuggestedRust(snap *RepoSnapshot) string {
+	if snap == nil {
+		return "rust184"
+	}
+	return snap.suggestedRustAppKey()
+}
+
 func profileRequiredApps(fw string, plan DeployPlan, snap *RepoSnapshot) []string {
 	var keys []string
 	add := func(k ...string) { keys = append(keys, k...) }
@@ -161,6 +177,8 @@ func profileRequiredApps(fw string, plan DeployPlan, snap *RepoSnapshot) []strin
 		add(nodeAppKeyForSnap(snap))
 	case "nodejs":
 		add(nodeAppKeyForSnap(snap), "pm2")
+	case "rust":
+		add(snapSuggestedRust(snap), "pm2")
 	case "docker":
 		add("docker")
 	default:
@@ -173,6 +191,9 @@ func profileRequiredApps(fw string, plan DeployPlan, snap *RepoSnapshot) []strin
 			}
 			if snap.HasNodeServer {
 				add("pm2")
+			}
+			if snap.HasCargo {
+				add(snapSuggestedRust(snap), "pm2")
 			}
 			if plan.NeedDatabase {
 				add("mysql")
@@ -254,6 +275,8 @@ func automatedPostNotes(fw string, panel PanelContext, dbConfigured bool) string
 		}
 	case "nodejs":
 		notes = append(notes, "Node 进程已通过 PM2 启动，Nginx 反代已配置。")
+	case "rust":
+		notes = append(notes, "Rust 二进制已通过 PM2/运行环境启动，Nginx 反代已配置。")
 	case "nextjs", "vue", "react", "static":
 		notes = append(notes, "前端构建产物目录已设为 Nginx 文档根。")
 	case "docker":
@@ -309,6 +332,14 @@ func nodeServiceDeployScript(snap *RepoSnapshot) string {
 	_ = startScript
 	return `set -euo pipefail
 ` + gitCloneIntoSiteRootBlock() + npmInstallBlock() + npmBuildBlock()
+}
+
+func rustDeployScript() string {
+	return `set -euo pipefail
+` + gitCloneIntoSiteRootBlock() + `
+export PATH="$HOME/.cargo/bin:/usr/local/cargo/bin:$PATH"
+cargo build --release
+`
 }
 
 func genericBuildDeployScript(dataDir string, panel PanelContext, snap *RepoSnapshot) string {
