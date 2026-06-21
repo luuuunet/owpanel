@@ -212,6 +212,7 @@ setup_php_repo() {
 setup_mongodb_repo() {
   local ver="${1:-7.0}"
   ensure_codename
+  apt_sanitize_known_bad_repos || true
   gpg_dearmor_url "https://pgp.mongodb.com/server-${ver}.asc" "/usr/share/keyrings/mongodb-server-${ver}.gpg"
   local suite
   suite="$(mongodb_apt_suite)"
@@ -222,7 +223,14 @@ setup_mongodb_repo() {
     write_apt_repo "/etc/apt/sources.list.d/mongodb-org-${ver}.list" \
       "deb [signed-by=/usr/share/keyrings/mongodb-server-${ver}.gpg] https://repo.mongodb.org/apt/debian ${suite}/mongodb-org/${ver} main"
   fi
-  apt_update
+  if apt_update; then
+    return 0
+  fi
+  log "apt update failed with MongoDB ${ver} repo — removing broken list"
+  rm -f "/etc/apt/sources.list.d/mongodb-org-${ver}.list"
+  apt_sanitize_known_bad_repos || true
+  apt_update || true
+  return 1
 }
 
 # MongoDB apt repos lag new distro releases; map to the nearest supported suite.

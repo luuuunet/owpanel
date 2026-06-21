@@ -196,7 +196,7 @@ func (s *Service) pgDbOwner(dbName string) string {
 }
 
 func (s *Service) syncMongoDB() int {
-	if _, err := findBinary("mongosh", "mongo"); err != nil {
+	if _, err := findBinary("mongosh", "mongo"); err != nil && !mongoDockerRunning() {
 		return 0
 	}
 	out, err := s.mongoShellExec("--eval", "db.adminCommand({listDatabases:1}).databases.forEach(function(d){print(d.name)})")

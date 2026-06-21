@@ -31,7 +31,7 @@ var packageSpecs = map[string]packageSpec{
 	"mariadb":       {Apt: []string{"mariadb-server"}, Dnf: []string{"mariadb-server"}, Service: "mariadb"},
 	"postgresql":    {Apt: []string{"postgresql", "postgresql-contrib"}, Dnf: []string{"postgresql-server", "postgresql"}, Service: "postgresql"},
 	"redis":         {Apt: []string{"redis-server"}, Dnf: []string{"redis"}, Service: "redis-server", ServiceRpm: "redis"},
-	"mongodb":       {Apt: []string{"mongodb"}, Dnf: []string{"mongodb-org"}, Service: "mongod"},
+	"mongodb":       {Apt: []string{}, Dnf: []string{"mongodb-org"}, Service: "mongod"},
 	"php83":         {Apt: []string{"php8.3-fpm", "php8.3-mysql", "php8.3-cli", "php8.3-common", "php8.3-xml", "php8.3-curl", "php8.3-mbstring"}, Dnf: []string{"php-fpm", "php-mysqlnd", "php-cli", "php-xml", "php-mbstring"}, Service: "php8.3-fpm", ServiceRpm: "php-fpm", WinPackages: []string{"PHP.PHP.8.3"}},
 	"php82":         {Apt: []string{"php8.2-fpm", "php8.2-mysql", "php8.2-cli", "php8.2-common", "php8.2-xml", "php8.2-curl", "php8.2-mbstring"}, Service: "php8.2-fpm"},
 	"php81":         {Apt: []string{"php8.1-fpm", "php8.1-mysql", "php8.1-cli", "php8.1-common", "php8.1-xml", "php8.1-curl", "php8.1-mbstring"}, Service: "php8.1-fpm"},
@@ -142,6 +142,9 @@ func runSystemInstall(key, version, installPath, dataDir string) error {
 		return err
 	}
 	if ok, err := tryMySQLInstall(key, version, installPath, dataDir); ok {
+		return err
+	}
+	if ok, err := tryMongoDBInstall(key, version, installPath, dataDir); ok {
 		return err
 	}
 	if ok, err := tryPHPInstall(key, version, installPath, dataDir); ok {
