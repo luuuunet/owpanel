@@ -5,23 +5,27 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/luuuunet/owpanel">GitHub</a> ·
+  <a href="https://github.com/luuuunet/owpanel/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+  <a href="https://github.com/luuuunet/owpanel"><img src="https://img.shields.io/badge/language-Go-green.svg" alt="Language"></a>
+  <a href="https://github.com/luuuunet/owpanel"><img src="https://img.shields.io/badge/frontend-Vue3-brightgreen.svg" alt="Frontend"></a>
+</p>
+
+<p align="center">
   <a href="#-快速安装">快速安装</a> ·
-  <a href="docs/README.md">文档中心</a>
+  <a href="docs/README.md">文档中心</a> ·
+  <a href="https://github.com/luuuunet/owpanel">GitHub 仓库</a>
 </p>
 
 ---
 
 **OWPanel** 是面向 Linux 服务器的开源自托管运维面板。我们坚持“数据本地化”原则，不绑定任何云端厂商账号；通过 Web 界面统一管理网站、数据库、Docker、安全与自动化运维。
 
-> **提示**：原项目名 **Open Panel**，现仓库地址：[github.com/luuuunet/owpanel](https://github.com/luuuunet/owpanel)
-
 ## 🚀 核心亮点
 
 * **🛡️ 完全自托管/去中心化**：单二进制部署，彻底摆脱第三方云平台依赖。
 * **⚡ 轻量化架构**：Go 编写后端，预编译包仅约 **16 MB**，在 1 GB 内存的 VPS 上即可从容运行。
 * **🛠️ 全栈运维与 DevOps**：从基础环境到 K8s 集群，从邮件服务到安全审计，提供企业级管控能力。
-* **🤖 智能化辅助**：集成 AI 助手，支持日志分析、终端辅助及自动化运维工作流。
+* **🤖 智能化辅助**：集成 AI 助手，支持日志自动分析、终端辅助及自动化运维工作流。
 * **🔐 高安全性**：内置 PAM 堡垒机、WAF 防火墙及多重安全策略，确保数据与访问安全。
 
 ## 🛠 功能生态
@@ -50,21 +54,6 @@
 
 ```bash
 curl -fsSL [https://raw.githubusercontent.com/luuuunet/owpanel/v0.1.15/scripts/install.sh](https://raw.githubusercontent.com/luuuunet/owpanel/v0.1.15/scripts/install.sh) | sudo bash
-
-### Upgrade from Open Panel
-
-If you previously installed **Open Panel** under `/opt/open-panel`, re-run the install script or migrate manually:
-
-```bash
-# Option A: fresh install to new path (recommended for new servers)
-curl -fsSL https://raw.githubusercontent.com/luuuunet/owpanel/v0.1.15/scripts/install.sh | sudo bash
-
-# Option B: keep existing data — set env vars before starting owpanel
-export OWPANEL_DATA=/opt/open-panel/data
-export OWPANEL_WEB=/opt/open-panel/web
-```
-
-Legacy `OPEN_PANEL_*` environment variables are still accepted for compatibility.
 
 ### Documentation
 
