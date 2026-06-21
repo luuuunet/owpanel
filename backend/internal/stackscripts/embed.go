@@ -2,6 +2,7 @@ package stackscripts
 
 import (
 	"embed"
+	"bytes"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -49,6 +50,8 @@ func ExtractTo(dest string) error {
 		if strings.HasSuffix(rel, ".sh") {
 			mode = 0755
 		}
+		data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+		data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
 		return os.WriteFile(target, data, mode)
 	})
 }

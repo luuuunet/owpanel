@@ -43,17 +43,20 @@ func DownloadTo(dest string) error {
 	var lastErr error
 	for _, url := range releaseTarballURLs() {
 		if err := downloadReleaseTarball(url, dest); err == nil {
+			_ = NormalizeLineEndings(dest)
 			return nil
 		} else {
 			lastErr = err
 		}
 	}
 	if err := downloadRawScripts(dest); err == nil {
+		_ = NormalizeLineEndings(dest)
 		return nil
 	} else if lastErr == nil {
 		lastErr = err
 	}
 	if err := ExtractTo(dest); err == nil {
+		_ = NormalizeLineEndings(dest)
 		return nil
 	}
 	if lastErr != nil {
@@ -157,7 +160,7 @@ func downloadRawScripts(dest string) error {
 		if strings.HasSuffix(name, ".sh") {
 			mode = 0755
 		}
-		if err := os.WriteFile(filepath.Join(dest, name), body, mode); err != nil {
+		if err := normalizeScriptFile(filepath.Join(dest, name), body, mode); err != nil {
 			return err
 		}
 	}

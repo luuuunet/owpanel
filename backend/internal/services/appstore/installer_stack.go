@@ -83,6 +83,7 @@ func resolveStackScriptDir() string {
 
 func ensureStackScriptDir() (string, error) {
 	if dir := resolveStackScriptDir(); dir != "" {
+		_ = stackscripts.NormalizeLineEndings(dir)
 		return dir, nil
 	}
 	dest := stackScriptsCacheDir()
@@ -93,7 +94,44 @@ func ensureStackScriptDir() (string, error) {
 	if !fileExists(filepath.Join(dest, "fallback.sh")) {
 		return "", fmt.Errorf("stack 脚本不完整（缺少 fallback.sh）")
 	}
+	_ = stackscripts.NormalizeLineEndings(dest)
 	return dest, nil
+}
+
+func linuxDistroPackagesEmpty(spec packageSpec) bool {
+	switch detectLinuxPkgMgr() {
+	case "apt":
+		return len(spec.Apt) == 0
+	case "dnf", "yum":
+		return len(spec.Dnf) == 0
+	default:
+		return true
+	}
+}
+
+func installLinuxPackagesWithFallback(key string, spec packageSpec) error {
+	platform.SanitizeBrokenAptRepos()
+	var err error
+	if linuxDistroPackagesEmpty(spec) {
+		if !stackFallbackSupported(key) {
+			return fmt.Errorf("no packages defined for this software")
+		}
+		logInstallLine(fmt.Sprintf("系统源无 %s 标准软件包，跳过步骤 1，使用 GitHub stack 安装脚本（内含官方源）…", key))
+		err = fmt.Errorf("no distro package for %s", key)
+	} else {
+		logInstallLine(fmt.Sprintf("步骤 1/2：通过系统包管理器安装 %s（发行版/官方源）…", key))
+		err = installLinuxPackages(spec)
+		if err == nil {
+			logInstallLine(fmt.Sprintf("%s 已通过系统官方源安装成功", key))
+			return nil
+		}
+		logInstallLine(fmt.Sprintf("步骤 1 失败: %v", err))
+	}
+	logInstallLine("步骤 2/2：从 GitHub 仓库 luuuunet/owpanel 下载 stack 安装脚本（内含各组件官方源与回退方案）…")
+	if fbErr := runStackFallback(key); fbErr != nil {
+		return fmt.Errorf("官方安装: %w; GitHub stack 脚本: %v", err, fbErr)
+	}
+	return nil
 }
 
 func runStackFallback(key string) error {
@@ -141,23 +179,4 @@ func runStackFallback(key string) error {
 		}
 	}
 	return err
-}
-
-func installLinuxPackagesWithFallback(key string, spec packageSpec) error {
-	platform.SanitizeBrokenAptRepos()
-	logInstallLine(fmt.Sprintf("步骤 1/2：通过系统包管理器安装 %s（发行版/官方源）…", key))
-	err := installLinuxPackages(spec)
-	if err == nil {
-		logInstallLine(fmt.Sprintf("%s 已通过系统官方源安装成功", key))
-		return nil
-	}
-	if !stackFallbackSupported(key) {
-		return err
-	}
-	logInstallLine(fmt.Sprintf("步骤 1 失败: %v", err))
-	logInstallLine("步骤 2/2：从 GitHub 仓库 luuuunet/owpanel 下载 stack 安装脚本（内含各组件官方源与回退方案）…")
-	if fbErr := runStackFallback(key); fbErr != nil {
-		return fmt.Errorf("官方安装: %w; GitHub stack 脚本: %v", err, fbErr)
-	}
-	return nil
 }
