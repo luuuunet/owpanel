@@ -70,14 +70,6 @@ func ensureMySQLDataDir(version, installPath, dataDir string) error {
 
 func installMySQLApt(version, installPath, dataDir string) error {
 	platform.SanitizeBrokenAptRepos()
-	osInfo := platform.Detect()
-	if osInfo.OSFamily == "debian" || osInfo.OSFamily == "ubuntu" {
-		logInstallLine("Debian/Ubuntu 优先安装 MariaDB（MySQL 兼容，官方仓库稳定可用）…")
-		if err := runStackFallback("mariadb"); err == nil {
-			return startMySQLService("mariadb")
-		}
-		logInstallLine(fmt.Sprintf("MariaDB stack 安装未成功，尝试 Oracle MySQL %s …", version))
-	}
 
 	pkgs := mysqlAptPackages(version)
 	if len(pkgs) == 0 {
@@ -92,21 +84,18 @@ func installMySQLApt(version, installPath, dataDir string) error {
 		logInstallLine("归档/本地安装未成功，继续尝试 Oracle APT 仓库 …")
 	}
 
+	logInstallLine(fmt.Sprintf("步骤 1/2：配置 Oracle MySQL %s 官方源并安装 …", version))
 	if err := setupMySQLAptRepo(version); err != nil {
-		if fbErr := installMariaDBFallback(version, err); fbErr == nil {
-			return nil
+		logInstallLine(fmt.Sprintf("Oracle MySQL 官方源配置失败: %v", err))
+	} else {
+		presetMySQLCommunityDebconf()
+		if err := runAptInstall(pkgs...); err == nil {
+			return startMySQLServiceLinux()
 		}
-		return fmt.Errorf("配置 Oracle MySQL 官方源失败（Debian/Ubuntu 已移除 mysql-server 包）: %w。建议改用软件商店中的 MariaDB，或检查网络能否访问 dev.mysql.com", err)
+		logInstallLine(fmt.Sprintf("Oracle MySQL %s 官方包安装失败: %v", version, err))
 	}
 
-	presetMySQLCommunityDebconf()
-	if err := runAptInstall(pkgs...); err != nil {
-		if fbErr := installMariaDBFallback(version, err); fbErr == nil {
-			return nil
-		}
-		return fmt.Errorf("安装 MySQL %s: %w", version, err)
-	}
-	return startMySQLServiceLinux()
+	return installMariaDBFallback(version, fmt.Errorf("oracle mysql %s unavailable", version))
 }
 
 // installMariaDBFallback installs MariaDB when Oracle MySQL is unavailable on Debian-family systems.
@@ -115,18 +104,19 @@ func installMariaDBFallback(version string, cause error) error {
 		return cause
 	}
 	platform.SanitizeBrokenAptRepos()
-	logInstallLine(fmt.Sprintf("MySQL %s 官方包安装失败 (%v)，尝试 MariaDB …", version, cause))
+	logInstallLine(fmt.Sprintf("步骤 2/2：MySQL %s 官方安装失败 (%v)，从 GitHub 拉取 MariaDB stack 脚本 …", version, cause))
 	if err := runStackFallback("mariadb"); err == nil {
-		logInstallLine("已通过 stack 脚本安装 MariaDB（MySQL 兼容，Debian 推荐）")
+		logInstallLine("已通过 GitHub stack 脚本安装 MariaDB（MySQL 兼容）")
 		return startMySQLService("mariadb")
 	}
+	logInstallLine("GitHub stack 脚本未成功，尝试系统源 mariadb-server …")
 	if err := platform.AptGetUpdate("-qq"); err != nil {
 		return fmt.Errorf("%w; apt update after MariaDB stack: %v", cause, err)
 	}
 	if err := runAptInstall("mariadb-server"); err != nil {
 		return cause
 	}
-	logInstallLine("已安装 MariaDB（MySQL 兼容，Debian 推荐）")
+	logInstallLine("已安装 MariaDB（MySQL 兼容，系统源）")
 	return startMySQLService("mariadb")
 }
 

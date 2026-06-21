@@ -1,7 +1,11 @@
 {
   "name": "owpanel-stack-scripts",
-  "description": "Multi-channel Linux installers for common panel software (apt/dnf/yum fallbacks)",
+  "description": "Multi-channel Linux installers hosted on GitHub (luuuunet/owpanel). Panel tries distro official packages first; on failure downloads these scripts.",
+  "install_strategy": "official_first_then_github_scripts",
   "repository": "https://github.com/luuuunet/owpanel/tree/main/scripts/stack",
+  "release_asset": "owpanel-stack-scripts.tar.gz",
+  "github_raw_base": "https://raw.githubusercontent.com/luuuunet/owpanel/main/scripts/stack",
+  "note": "Scripts configure vendor official repos (MongoDB.org, PostgreSQL PGDG, MariaDB, Docker) — not pre-built .deb/.rpm binaries.",
   "components": {
     "nginx": { "script": "install-nginx.sh", "packages": ["nginx"] },
     "openresty": { "script": "install-openresty.sh", "packages": ["openresty"] },

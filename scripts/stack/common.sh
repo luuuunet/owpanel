@@ -285,3 +285,49 @@ performance_schema = OFF
 EOF
   log "applied low-memory MariaDB config (${ram_mb}MB RAM)"
 }
+
+# GitHub-hosted stack scripts (luuuunet/owpanel). Used when panel falls back after distro apt fails.
+owpanel_github_repo() {
+  echo "${OWPANEL_GITHUB_REPO:-luuuunet/owpanel}"
+}
+
+owpanel_github_stack_raw_base() {
+  local ref="${OWPANEL_STACK_REF:-main}"
+  echo "${OWPANEL_STACK_BASE:-https://raw.githubusercontent.com/$(owpanel_github_repo)/${ref}/scripts/stack}"
+}
+
+owpanel_github_stack_tarball_urls() {
+  local repo tag
+  repo="$(owpanel_github_repo)"
+  tag="${OWPANEL_STACK_TAG:-}"
+  if [[ -n "$tag" ]]; then
+    echo "https://github.com/${repo}/releases/download/${tag}/owpanel-stack-scripts.tar.gz"
+  fi
+  echo "https://github.com/${repo}/releases/latest/download/owpanel-stack-scripts.tar.gz"
+}
+
+# Download stack install scripts from GitHub release tarball, then raw files.
+owpanel_download_stack_scripts() {
+  local dest="$1"
+  mkdir -p "$dest"
+  local url base f
+  for url in $(owpanel_github_stack_tarball_urls); do
+    log "downloading stack scripts from GitHub release: $url"
+    if curl -fsSL --connect-timeout 30 --max-time 180 --retry 3 "$url" | tar -xzf - -C "$dest" 2>/dev/null; then
+      find "$dest" -maxdepth 2 -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
+      [[ -f "$dest/fallback.sh" || -f "$dest/stack/fallback.sh" ]] && return 0
+    fi
+  done
+  base="$(owpanel_github_stack_raw_base)"
+  log "release tarball unavailable; fetching raw scripts from $base"
+  for f in common.sh install-nginx.sh install-mariadb.sh install-php.sh install-redis.sh \
+    install-postgresql.sh install-mongodb.sh install-apache.sh install-openresty.sh \
+    install-docker.sh install-certbot.sh install-generic.sh; do
+    curl -fsSL --connect-timeout 30 --max-time 120 --retry 3 \
+      "${base}/${f}" -o "${dest}/${f}" || return 1
+    chmod +x "${dest}/${f}" 2>/dev/null || true
+  done
+  curl -fsSL --connect-timeout 30 --max-time 120 --retry 3 \
+    "${base}/fallback.sh" -o "${dest}/fallback.sh" || return 1
+  chmod +x "${dest}/fallback.sh"
+}

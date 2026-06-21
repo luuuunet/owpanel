@@ -16,12 +16,13 @@ ensure_prereqs
 
 case "$PKG" in
   apt)
+    log "步骤 1：尝试系统源 postgresql …"
     if try_apt_retry postgresql postgresql-contrib; then
       enable_start postgresql
       log "postgresql installed from default apt"
       exit 0
     fi
-    log "default apt postgresql failed, trying PGDG repo …"
+    log "步骤 2：系统源失败，配置 PostgreSQL PGDG 官方源 …"
     ensure_codename
     rm -f /etc/apt/sources.list.d/pgdg-owpanel.list
     gpg_dearmor_url "https://www.postgresql.org/media/keys/ACCC4CF8.asc" /usr/share/keyrings/postgresql.gpg

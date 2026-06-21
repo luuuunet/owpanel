@@ -107,10 +107,12 @@ func runStackFallback(key string) error {
 		}
 	}
 	component := stackFallbackComponent(key)
-	logInstallLine(fmt.Sprintf("使用 stack 多通道安装 %s …", component))
+	logInstallLine(fmt.Sprintf("从 GitHub 仓库 luuuunet/owpanel 获取 stack 安装脚本（%s）…", component))
+	logInstallLine(fmt.Sprintf("脚本来源: %s", stackscripts.RemoteBase()))
 
 	scriptDir, err := ensureStackScriptDir()
 	if err == nil {
+		logInstallLine(fmt.Sprintf("使用本地/缓存 stack 脚本: %s", scriptDir))
 		script := filepath.Join(scriptDir, "fallback.sh")
 		return runCommand("bash", script, component)
 	}
@@ -143,31 +145,19 @@ func runStackFallback(key string) error {
 
 func installLinuxPackagesWithFallback(key string, spec packageSpec) error {
 	platform.SanitizeBrokenAptRepos()
-	// Database engines: use stack scripts first on apt (handles repo quirks + broken third-party lists).
-	if detectLinuxPkgMgr() == "apt" && stackFallbackSupported(key) {
-		switch key {
-		case "mongodb", "redis", "postgresql", "mariadb", "mysql":
-			if err := runStackFallback(key); err == nil {
-				return nil
-			}
-		}
-	}
-	// Ubuntu/Debian no longer ship a usable "mongodb" meta package; use stack script directly.
-	if key == "mongodb" && detectLinuxPkgMgr() == "apt" && stackFallbackSupported(key) {
-		if err := runStackFallback(key); err != nil {
-			return err
-		}
-		return nil
-	}
+	logInstallLine(fmt.Sprintf("步骤 1/2：通过系统包管理器安装 %s（发行版/官方源）…", key))
 	err := installLinuxPackages(spec)
 	if err == nil {
+		logInstallLine(fmt.Sprintf("%s 已通过系统官方源安装成功", key))
 		return nil
 	}
 	if !stackFallbackSupported(key) {
 		return err
 	}
+	logInstallLine(fmt.Sprintf("步骤 1 失败: %v", err))
+	logInstallLine("步骤 2/2：从 GitHub 仓库 luuuunet/owpanel 下载 stack 安装脚本（内含各组件官方源与回退方案）…")
 	if fbErr := runStackFallback(key); fbErr != nil {
-		return fmt.Errorf("apt install: %w; stack fallback: %v", err, fbErr)
+		return fmt.Errorf("官方安装: %w; GitHub stack 脚本: %v", err, fbErr)
 	}
 	return nil
 }

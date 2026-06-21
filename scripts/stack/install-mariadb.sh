@@ -19,6 +19,7 @@ ensure_prereqs
 
 case "$PKG" in
   apt)
+    log "步骤 1：尝试系统源 mariadb-server …"
     export DEBIAN_FRONTEND=noninteractive
     debconf-set-selections <<'EOF' || true
 mariadb-server mariadb-server/root_password password owpanel
@@ -29,6 +30,7 @@ EOF
     elif try_apt_retry default-mysql-server; then
       log "installed default-mysql-server (MariaDB-compatible)"
     else
+      log "步骤 2：系统源不可用，配置 MariaDB 官方仓库 …"
       setup_mariadb_official_repo 10.11
       apt_install_retry mariadb-server || apt_install_retry mariadb-server-10.11
     fi

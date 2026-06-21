@@ -144,9 +144,6 @@ func runSystemInstall(key, version, installPath, dataDir string) error {
 	if ok, err := tryMySQLInstall(key, version, installPath, dataDir); ok {
 		return err
 	}
-	if ok, err := tryMongoDBInstall(key, version, installPath, dataDir); ok {
-		return err
-	}
 	if ok, err := tryPHPInstall(key, version, installPath, dataDir); ok {
 		return err
 	}
@@ -167,11 +164,8 @@ func runSystemInstall(key, version, installPath, dataDir string) error {
 			}
 			return err
 		}
-		if svc := serviceName(spec); svc != "" {
-			_ = runCommand("systemctl", "enable", svc)
-			if err := runCommand("systemctl", "start", svc); err != nil {
-				return fmt.Errorf("start service %s: %w", svc, err)
-			}
+		if err := startLinuxEngineService(key, spec); err != nil {
+			return err
 		}
 		return nil
 	case "windows":

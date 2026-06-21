@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# OWPanel stack fallback entrypoint — used by appstore when apt install fails.
-# Usage: fallback.sh nginx|redis|postgresql|docker|php83|…
+# OWPanel stack fallback entrypoint — used when distro apt/dnf install fails.
+# Strategy: panel tries system packages first; this script is fetched from GitHub (luuuunet/owpanel).
+# Usage: fallback.sh nginx|redis|postgresql|mongodb|mariadb|…
 set -euo pipefail
 
 # Fix broken third-party apt lists before any install (e.g. MongoDB noble repo blocks all apt updates).
@@ -32,34 +33,25 @@ owpanel_apt_emergency_sanitize
 COMPONENT="${1:-}"
 [[ -n "$COMPONENT" ]] || { echo "usage: $0 <component>" >&2; exit 1; }
 
-STACK_FILES=(
-  common.sh
-  fallback.sh
-  install-nginx.sh
-  install-mariadb.sh
-  install-php.sh
-  install-redis.sh
-  install-postgresql.sh
-  install-mongodb.sh
-  install-apache.sh
-  install-openresty.sh
-  install-docker.sh
-  install-certbot.sh
-  install-generic.sh
-)
-
 if [[ -f "${BASH_SOURCE[0]:-}" ]]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/common.sh"
 else
   SCRIPT_DIR="/tmp/owpanel-stack-$$"
   mkdir -p "$SCRIPT_DIR"
-  BASE="${OWPANEL_STACK_BASE:-https://raw.githubusercontent.com/luuuunet/owpanel/main/scripts/stack}"
-  for f in "${STACK_FILES[@]}"; do
-    [[ "$f" == "fallback.sh" ]] && continue
-    curl -fsSL --connect-timeout 30 --max-time 120 --retry 3 \
-      "${BASE}/${f}" -o "${SCRIPT_DIR}/${f}"
-    chmod +x "${SCRIPT_DIR}/${f}"
-  done
+  curl -fsSL --connect-timeout 30 --max-time 120 --retry 3 \
+    "$(owpanel_github_stack_raw_base 2>/dev/null || echo "https://raw.githubusercontent.com/luuuunet/owpanel/main/scripts/stack")/common.sh" \
+    -o "$SCRIPT_DIR/common.sh" || {
+    echo "[owpanel-stack] ERROR: cannot download common.sh from GitHub" >&2
+    exit 1
+  }
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/common.sh"
+  owpanel_download_stack_scripts "$SCRIPT_DIR" || {
+    echo "[owpanel-stack] ERROR: cannot download stack scripts from GitHub" >&2
+    exit 1
+  }
 fi
 
 case "$COMPONENT" in

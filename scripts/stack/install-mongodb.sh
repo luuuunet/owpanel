@@ -62,7 +62,7 @@ install_mongodb_docker() {
 
 case "$PKG" in
   apt)
-    log "installing MongoDB from official repository (Ubuntu/Debian) …"
+    log "步骤 1：尝试 MongoDB 官方 apt 源 (mongodb-org) …"
     for ver in 7.0 6.0 8.0; do
       if install_mongodb_org "$ver"; then
         enable_start mongod || systemctl start mongod || true
@@ -70,7 +70,7 @@ case "$PKG" in
         exit 0
       fi
     done
-    log "official MongoDB apt repos failed — falling back to Docker …"
+    log "步骤 2：官方 apt 源均失败，使用 Docker 运行 MongoDB …"
     install_mongodb_docker || die "mongodb install failed (apt repos and Docker fallback)"
     exit 0
     ;;
