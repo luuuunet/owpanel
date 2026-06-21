@@ -32,6 +32,7 @@
 - 🔐 **Security hardening** — Security entrance, 2FA, IP allow/deny lists, session timeout, security headers
 - 📊 **Smart ops** — Health score, one-click optimize, memory release, auto inspection & alerts
 - 🤖 **AI assist** (optional) — Log analysis, terminal helper, site/deploy workflows
+- ☸️ **Cloud Native & AI Infra Hub** — LLMOps, DataOps, AIOps, SecOps & cross-cluster orchestration in one console
 - 📥 **Official repos first** — App store uses apt/dnf packages first, GitHub stack scripts as fallback
 - 🧩 **Extensible** — Extension marketplace, Docker Compose templates, one-click deploy
 - 👥 **Sub-accounts** — Module-level permissions for team workflows
@@ -51,6 +52,7 @@
 | 🛡️ **Security** | Firewall, Nginx WAF, CDN cache, Cilium policies, security scan, Fail2ban |
 | 🤖 **Automation** | Cron jobs, panel/site/DB backups, uptime monitoring, auto-ops, DevOps center |
 | ☸️ **Cluster** | Multi-node cluster agent, Kubernetes management |
+| 🧩 **Cloud Native & AI Infra Hub** | **LLMOps** (HF/TGI/vLLM/Ollama, GPU, weight snapshots) · **DataOps** (Milvus/Qdrant/Weaviate, RAG apps, MinIO/Ceph) · **AIOps** (log AI, Prometheus/VM, health scoring) · **SecOps** (Cilium policies, threat intel, auto defense) · **Orchestration** (cluster/K8s/Compose, DevOps CI/CD) |
 | 📋 **Logs** | Panel/system/site/CDN/WAF log aggregation, AI log analysis |
 | 🧠 **AI** | AI hub, Hugging Face model deploy, site assistant, file editor AI chat |
 | 🏪 **Software** | App store, installed apps, extension marketplace, online config & install logs |

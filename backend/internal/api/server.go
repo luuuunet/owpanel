@@ -34,6 +34,7 @@ import (
 	"github.com/luuuunet/owpanel/internal/services/cron"
 	"github.com/luuuunet/owpanel/internal/services/dashboard"
 	dbsvc "github.com/luuuunet/owpanel/internal/services/database"
+	"github.com/luuuunet/owpanel/internal/services/dataplatform"
 	"github.com/luuuunet/owpanel/internal/services/devops"
 	"github.com/luuuunet/owpanel/internal/services/dns"
 	"github.com/luuuunet/owpanel/internal/services/docker"
@@ -131,6 +132,7 @@ type Server struct {
 	migration   *migration.Service
 	panelupdate *panelupdate.Service
 	enterprise  *enterprise.Service
+	dataplatform *dataplatform.Service
 
 	monitorExtrasMu sync.Mutex
 	monitorExtrasAt time.Time
@@ -296,6 +298,10 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 	securitySvc := security.NewService(wafSvc, appSvc, settingsSvc, db)
 	enterpriseSvc := enterprise.NewService(db, settingsSvc, clusterSvc, dashSvc, securitySvc, uptimeSvc, syslogSvc)
 	enterpriseSvc.StartRetentionJob()
+	ciliumSvc := cilium.NewService(db, appSvc, cfg.DataDir)
+	k8sSvc := k8s.NewService(appSvc, settingsSvc, cfg.DataDir)
+	logsSvc := logs.NewService(cfg.DataDir, db)
+	dataplatformSvc := dataplatform.NewService(cfg.DataDir, appSvc, ciliumSvc, settingsSvc, k8sSvc, aihubSvc, clusterSvc, logsSvc, autoOpsSvc, composeSvc)
 	bastionSvc.SetSyslogEmitter(func(eventType, message string) {
 		syslogSvc.Emit(eventType, message)
 	})
@@ -351,7 +357,7 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 		sshmgr:    sshSvc,
 		compose:   composeSvc,
 		process:   process.NewService(),
-		logs:      logs.NewService(cfg.DataDir, db),
+		logs:      logsSvc,
 		toolbox:   toolbox.NewService(db),
 		settings:  settingsSvc,
 		performance: perfSvc,
@@ -371,8 +377,8 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 		runtime:   runtimeSvc,
 		security:   securitySvc,
 		kafkaaccel: kafkaaccel.NewService(db, appSvc),
-		cilium:     cilium.NewService(db, appSvc, cfg.DataDir),
-		k8s:        k8s.NewService(appSvc, settingsSvc, cfg.DataDir),
+		cilium:     ciliumSvc,
+		k8s:        k8sSvc,
 		webserver:  wsMgr,
 		phpmyadmin: pmaSvc,
 		autops:     autoOpsSvc,
@@ -390,6 +396,7 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 		migration:  migration.NewService(db, cfg.DataDir, settingsSvc),
 		panelupdate: panelupdate.NewService(db, cfg.DataDir, settingsSvc),
 		enterprise: enterpriseSvc,
+		dataplatform: dataplatformSvc,
 	}
 	appSvc.SetPostInstallHook(func(key string) error {
 		if err := basePostInstall(key); err != nil {
@@ -717,6 +724,7 @@ func (s *Server) registerRoutes(r gin.IRouter, engine *gin.Engine, safePath stri
 				s.registerAutoOpsRoutes(monitor)
 				s.registerCloudRoutes(monitor)
 				s.registerClusterRoutes(monitor)
+				s.registerDataPlatformRoutes(monitor)
 			}
 
 			admin := authorized.Group("")

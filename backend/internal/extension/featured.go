@@ -140,5 +140,37 @@ func FeaturedCatalog() []FeaturedPack {
 			Tags: []string{"AI", "推理"},
 			UninstallAPI: "/ai/huggingface/uninstall",
 		},
+		{
+			ID: "milvus-rag", Name: "Milvus 向量库", NameEN: "Milvus Vector DB",
+			Description: "RAG Embeddings 存储，etcd+MinIO 生产级 Compose 栈",
+			DescriptionEN: "Production Milvus stack for RAG embeddings",
+			Category: "devtools", Icon: "Coin", Accent: "#10b981",
+			AppKey: "milvus", ConfigRoute: "/infra-hub?tab=dataops",
+			Tags: []string{"向量", "RAG", "AI"},
+		},
+		{
+			ID: "victoria-metrics", Name: "VictoriaMetrics", NameEN: "VictoriaMetrics",
+			Description: "高性能集群时序指标存储，支撑自动扩缩容与健康预测",
+			DescriptionEN: "High-performance metrics storage for cluster telemetry",
+			Category: "monitoring", Icon: "Odometer", Accent: "#621773",
+			AppKey: "victoria-metrics", ConfigRoute: "/infra-hub?tab=aiops",
+			Tags: []string{"指标", "集群"},
+		},
+		{
+			ID: "vllm-infer", Name: "vLLM 推理", NameEN: "vLLM Inference",
+			Description: "高性能 GPU 推理引擎，OpenAI 兼容 API，Compose 一键部署",
+			DescriptionEN: "High-performance GPU inference with OpenAI-compatible API",
+			Category: "devtools", Icon: "Odometer", Accent: "#7c3aed",
+			AppKey: "vllm", ConfigRoute: "/infra-hub?tab=llmops",
+			Tags: []string{"LLMOps", "GPU", "推理"},
+		},
+		{
+			ID: "weaviate-rag", Name: "Weaviate", NameEN: "Weaviate",
+			Description: "GraphQL 向量库，混合检索与本地化 AI 知识库",
+			DescriptionEN: "GraphQL vector DB for hybrid search and local RAG",
+			Category: "devtools", Icon: "Search", Accent: "#4ade80",
+			AppKey: "weaviate", ConfigRoute: "/infra-hub?tab=dataops",
+			Tags: []string{"向量", "GraphQL"},
+		},
 	}
 }

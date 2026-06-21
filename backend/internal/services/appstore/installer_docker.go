@@ -58,6 +58,9 @@ func tryDockerServiceAction(key, action string) (bool, error) {
 }
 
 func tryDockerStatus(key, dataDir string) (bool, string) {
+	if ok, status := tryDataPlatformStatus(key, dataDir); ok {
+		return true, status
+	}
 	if key == openpanelAppKey {
 		if !OpenpanelInstalled(dataDir) {
 			return false, ""
@@ -126,6 +129,11 @@ func requiresDockerEngine(key string) bool {
 	switch key {
 	case "kafka", "huggingface-ai", "openpanel", "open-panel":
 		return true
+	}
+	for k := range dataPlatformComposeKeys {
+		if key == k {
+			return true
+		}
 	}
 	return false
 }
@@ -269,6 +277,9 @@ func installDockerApp(key string, spec dockerAppSpec, dataDir string) error {
 		args = append(args, "-v", v)
 	}
 	args = append(args, spec.Image)
+	if len(spec.Command) > 0 {
+		args = append(args, spec.Command...)
+	}
 	if err := runCommand("docker", args...); err != nil {
 		return fmt.Errorf("docker run %s: %w", spec.Container, err)
 	}

@@ -91,6 +91,18 @@ export const menuGroups: MenuGroup[] = [
     items: [{ path: '/databases', titleKey: 'menu.database', icon: 'Coin', perm: 'databases' }],
   },
   {
+    titleKey: 'menuGroup.infraHub',
+    items: [
+      { path: '/infra-hub', titleKey: 'menu.infraHub', icon: 'Platform', perm: 'monitor' },
+    ],
+  },
+  {
+    titleKey: 'menuGroup.ai',
+    items: [
+      { path: '/ai', titleKey: 'menu.aiHub', icon: 'MagicStick', admin: true },
+    ],
+  },
+  {
     titleKey: 'menuGroup.docker',
     items: [
       { path: '/docker', titleKey: 'menu.docker', icon: 'Box', perm: 'docker' },
@@ -132,12 +144,6 @@ export const menuGroups: MenuGroup[] = [
   {
     titleKey: 'menuGroup.domains',
     items: [{ path: '/dns', titleKey: 'menu.dns', icon: 'Compass', admin: true }],
-  },
-  {
-    titleKey: 'menuGroup.ai',
-    items: [
-      { path: '/ai', titleKey: 'menu.aiHub', icon: 'MagicStick', admin: true },
-    ],
   },
   {
     titleKey: 'menuGroup.appStore',

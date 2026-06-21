@@ -24,7 +24,7 @@ var dockerAppSpecsExtra = map[string]dockerAppSpec{
 	"one-api":      {Container: "owpanel-one-api", Image: "justsong/one-api:latest", Port: "3000:3000", Volumes: []string{"owpanel-one-api:/data"}},
 	"new-api":      {Container: "owpanel-new-api", Image: "calciumion/new-api:latest", Port: "3008:3000", Volumes: []string{"owpanel-new-api:/data"}},
 	"chatgpt-next-web": {Container: "owpanel-next-web", Image: "yidadaa/chatgpt-next-web:latest", Port: "3009:3000"},
-	"milvus":       {Container: "owpanel-milvus", Image: "milvusdb/milvus:latest", Port: "19530:19530", Volumes: []string{"owpanel-milvus:/var/lib/milvus"}},
+	"milvus":       {Container: "owpanel-milvus", Image: "milvusdb/milvus:v2.4.4", Port: "19530:19530", Volumes: []string{"owpanel-milvus:/var/lib/milvus"}},
 	"qdrant":       {Container: "owpanel-qdrant", Image: "qdrant/qdrant:latest", Port: "6333:6333", Volumes: []string{"owpanel-qdrant:/qdrant/storage"}},
 	"flowise":      {Container: "owpanel-flowise", Image: "flowiseai/flowise:latest", Port: "3010:3000", Volumes: []string{"owpanel-flowise:/root/.flowise"}},
 

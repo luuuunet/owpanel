@@ -138,6 +138,9 @@ func runSystemInstall(key, version, installPath, dataDir string) error {
 	if ok, err := tryCiliumInstall(key, version, installPath, dataDir); ok {
 		return err
 	}
+	if ok, err := tryDataPlatformInstall(key, version, installPath, dataDir); ok {
+		return err
+	}
 	if ok, err := tryDockerInstall(key, version, installPath, dataDir); ok {
 		return err
 	}
@@ -194,6 +197,9 @@ func runSystemUninstall(key, dataDir string) error {
 	if ok, err := tryAIUninstall(key, dataDir); ok {
 		return err
 	}
+	if ok, err := tryDataPlatformUninstall(key, dataDir); ok {
+		return err
+	}
 	if ok, err := tryDockerUninstall(key, dataDir); ok {
 		return err
 	}
@@ -233,6 +239,9 @@ func runSystemUninstall(key, dataDir string) error {
 
 func runServiceAction(key, action, dataDir string) error {
 	if ok, err := tryOpenpanelServiceAction(key, action, dataDir); ok {
+		return err
+	}
+	if ok, err := tryDataPlatformServiceAction(key, action, dataDir); ok {
 		return err
 	}
 	if ok, err := tryDockerServiceAction(key, action); ok {

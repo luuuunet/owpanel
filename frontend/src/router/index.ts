@@ -36,6 +36,8 @@ const router = createRouter({
         { path: 'nginx', redirect: { path: 'protection', query: { tab: 'nginx' } } },
         { path: 'cache', redirect: { path: 'protection', query: { tab: 'cache' } } },
         { path: 'databases', name: 'databases', component: () => import('@/views/DatabasesView.vue'), meta: { titleKey: 'page.databases' } },
+        { path: 'infra-hub', name: 'infra-hub', component: () => import('@/views/InfraHubView.vue'), meta: { titleKey: 'page.infraHub' } },
+        { path: 'data-platform', redirect: { path: 'infra-hub', query: { tab: 'overview' } } },
         { path: 'files', name: 'files', component: () => import('@/views/FilesView.vue'), meta: { titleKey: 'page.files' } },
         { path: 'oss', name: 'oss', component: () => import('@/views/OSSView.vue'), meta: { titleKey: 'page.oss' } },
         { path: 'uptime', name: 'uptime', component: () => import('@/views/UptimeView.vue'), meta: { titleKey: 'page.uptime' } },

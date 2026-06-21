@@ -7,6 +7,7 @@ type dockerAppSpec struct {
 	Port      string // host:container
 	Env       []string
 	Volumes   []string // host:container
+	Command   []string // optional entrypoint args after image
 }
 
 // dockerAppSpecs — 内置 Docker 一键部署规格（需先安装 Docker）
@@ -41,7 +42,7 @@ var dockerAppSpecs = map[string]dockerAppSpec{
 	"frps":         {Container: "owpanel-frps", Image: "snowdreamtech/frps:latest", Port: "7500:7500", Volumes: []string{"owpanel-frps:/etc/frp"}},
 
 	// 中间件
-	"minio":           {Container: "owpanel-minio", Image: "minio/minio:latest", Port: "9001:9001", Env: []string{"MINIO_ROOT_USER=admin", "MINIO_ROOT_PASSWORD=openpanel123"}, Volumes: []string{"owpanel-minio:/data"}},
+	"minio":           {Container: "owpanel-minio", Image: "minio/minio:latest", Port: "9000:9000", Env: []string{"MINIO_ROOT_USER=admin", "MINIO_ROOT_PASSWORD=openpanel123"}, Volumes: []string{"owpanel-minio:/data"}, Command: []string{"server", "/data", "--console-address", ":9001"}},
 	"rabbitmq":        {Container: "owpanel-rabbitmq", Image: "rabbitmq:3-management-alpine", Port: "15672:15672", Env: []string{"RABBITMQ_DEFAULT_USER=admin", "RABBITMQ_DEFAULT_PASS=openpanel123"}},
 	"elasticsearch":   {Container: "owpanel-elasticsearch", Image: "elasticsearch:8.11.0", Port: "9200:9200", Env: []string{"discovery.type=single-node", "xpack.security.enabled=false", "ES_JAVA_OPTS=-Xms512m -Xmx512m"}, Volumes: []string{"owpanel-es-data:/usr/share/elasticsearch/data"}},
 	"nacos":           {Container: "owpanel-nacos", Image: "nacos/nacos-server:v2.3.2", Port: "8848:8848", Env: []string{"MODE=standalone"}},
