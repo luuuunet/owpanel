@@ -20,7 +20,7 @@
 
 **OWPanel** 是面向 Linux 服务器的开源自托管运维面板。数据留在你的机器上，不绑定厂商云端账号；通过 Web 界面统一管理网站、数据库、Docker、安全、备份与自动化运维。
 
-> 📦 原项目名 **Open Panel**，现仓库：[github.com/luuuunet/owpanel](https://github.com/luuuunet/owpanel)
+
 
 ## ✨ 产品特点
 
