@@ -69,6 +69,7 @@ var iconMetaOverrides = map[string]IconMeta{
 	"gitlab": {BG: "#FC6D26", Label: "GL"},
 	"grafana": {BG: "#F46800", Label: "Gr"},
 	"openpanel-analytics": {BG: "#6366F1", Label: "分析"},
+	"posthog":           {BG: "#F54E00", Label: "PH"},
 	"prometheus": {BG: "#E6522C", Label: "Pr"},
 	"elasticsearch": {BG: "#005571", Label: "ES"},
 	"minio": {BG: "#C72C48", Label: "Mi"},

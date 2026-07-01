@@ -278,6 +278,20 @@ onMounted(load)
           <el-table-column prop="fix_hint" :label="t('infraHub.fixHint')" min-width="220" show-overflow-tooltip />
         </el-table>
         <el-button class="mt" type="primary" @click="go('/logs')">{{ t('infraHub.openLogs') }}</el-button>
+        <h4 class="mt">{{ t('infraHub.growthPlatforms') }}</h4>
+        <el-table :data="overview?.aiops?.growth_platforms || []" stripe class="mb">
+          <el-table-column prop="name" width="160" />
+          <el-table-column prop="use_case" min-width="220" show-overflow-tooltip />
+          <el-table-column :label="t('common.status')" width="100">
+            <template #default="{ row }"><el-tag :type="statusTag(row.running, row.installed)" size="small">{{ row.running ? t('common.running') : t('common.stopped') }}</el-tag></template>
+          </el-table-column>
+          <el-table-column :label="t('common.actions')" width="120">
+            <template #default="{ row }">
+              <el-button v-if="row.key === 'posthog' || row.key === 'openpanel-analytics'" text type="primary" size="small" @click="go(`/product-analytics?provider=${row.key === 'posthog' ? 'posthog' : 'openpanel'}`)">{{ t('common.open') }}</el-button>
+              <el-button v-else text type="primary" size="small" @click="goSoftware(row.key)">{{ t('common.install') }}</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </el-tab-pane>
 
       <el-tab-pane :label="t('infraHub.tabSecOps')" name="secops">

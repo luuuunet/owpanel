@@ -27,6 +27,11 @@ owpanel_apt_emergency_sanitize() {
     rm -f /etc/apt/sources.list.d/mongodb-org-*.list
     apt-get update -qq || true
   fi
+  if grep -qE 'repo\.mysql\.com|EXPKEYSIG.*[Mm]ysql|mysql.*not signed' /tmp/owpanel-apt-pre.err 2>/dev/null; then
+    rm -f /etc/apt/sources.list.d/*mysql* /etc/apt/sources.list.d/mysql*.list 2>/dev/null || true
+    DEBIAN_FRONTEND=noninteractive apt-get remove -y --purge mysql-apt-config 2>/dev/null || true
+    apt-get update -qq || true
+  fi
 }
 owpanel_apt_emergency_sanitize
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api, { resolveApiError } from '@/api'
 import SoftwareInstallLogDialog from '@/components/SoftwareInstallLogDialog.vue'
@@ -14,15 +15,24 @@ import {
   VideoPlay,
 } from '@element-plus/icons-vue'
 
-const APP_KEY = 'openpanel-analytics'
-
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
-const status = ref({
+const analyticsProvider = ref<'openpanel' | 'posthog'>('openpanel')
+const posthogFeatures = ref<any[]>([])
+
+const appKey = computed(() => (analyticsProvider.value === 'posthog' ? 'posthog' : 'openpanel-analytics'))
+
+const status = ref<any>({
   installed: false,
   running: false,
   dashboard_url: 'http://localhost:3300',
   api_url: 'http://localhost:3333/api',
+  api_host: 'http://localhost:8020',
+  features: [] as any[],
+  min_ram_gb: 0,
+  hint: '',
 })
 const websites = ref<any[]>([])
 const selectedSiteId = ref<number | null>(null)
@@ -37,7 +47,12 @@ const trackingForm = ref({
   product_analytics_enabled: false,
   product_analytics_client_id: '',
   product_analytics_api_url: 'http://localhost:3333/api',
+  analytics_provider: 'openpanel',
 })
+
+const isPosthog = computed(() => analyticsProvider.value === 'posthog')
+const apiFieldLabel = computed(() => (isPosthog.value ? t('productAnalytics.projectApiKey') : t('productAnalytics.clientId')))
+const apiFieldHint = computed(() => (isPosthog.value ? t('productAnalytics.projectApiKeyHint') : t('productAnalytics.clientIdHint')))
 
 const snippet = ref('')
 
@@ -77,19 +92,25 @@ const kanbanColumns = computed(() => [
 ])
 
 async function loadStatus() {
-  const res: any = await api.get('/product-analytics/status')
+  const path = isPosthog.value ? '/posthog/status' : '/product-analytics/status'
+  const res: any = await api.get(path)
   status.value = res.data || status.value
-}
-
-async function loadWebsites() {
-  const res: any = await api.get('/websites')
-  websites.value = res.data || []
-  if (!selectedSiteId.value && websites.value.length) {
-    selectedSiteId.value = websites.value[0].id
+  if (isPosthog.value && Array.isArray(status.value.features)) {
+    posthogFeatures.value = status.value.features
   }
 }
 
 async function loadSnippet() {
+  if (isPosthog.value) {
+    const res: any = await api.get('/posthog/tracking-snippet', {
+      params: {
+        project_api_key: trackingForm.value.product_analytics_client_id || undefined,
+        api_host: trackingForm.value.product_analytics_api_url || status.value.api_host || undefined,
+      },
+    })
+    snippet.value = res.data?.snippet || ''
+    return
+  }
   const res: any = await api.get('/product-analytics/tracking-snippet', {
     params: {
       client_id: trackingForm.value.product_analytics_client_id || undefined,
@@ -100,10 +121,38 @@ async function loadSnippet() {
 }
 
 function applySiteToForm(site: any) {
+  const provider = site.analytics_provider === 'posthog' ? 'posthog' : 'openpanel'
+  analyticsProvider.value = provider
   trackingForm.value = {
     product_analytics_enabled: !!site.product_analytics_enabled,
     product_analytics_client_id: site.product_analytics_client_id || '',
-    product_analytics_api_url: site.product_analytics_api_url || status.value.api_url,
+    product_analytics_api_url:
+      site.product_analytics_api_url ||
+      (provider === 'posthog' ? status.value.api_host : status.value.api_url),
+    analytics_provider: provider,
+  }
+}
+
+function setProvider(p: 'openpanel' | 'posthog') {
+  if (analyticsProvider.value === p && route.query.provider === p) return
+  analyticsProvider.value = p
+  trackingForm.value.analytics_provider = p
+  if (p === 'posthog') {
+    trackingForm.value.product_analytics_api_url = status.value.api_host || 'http://localhost:8020'
+  } else {
+    trackingForm.value.product_analytics_api_url = status.value.api_url || 'http://localhost:3333/api'
+  }
+  if (route.query.provider !== p) {
+    router.replace({ query: { ...route.query, provider: p } })
+  }
+  loadStatus().then(() => loadSnippet())
+}
+
+async function loadWebsites() {
+  const res: any = await api.get('/websites')
+  websites.value = res.data || []
+  if (!selectedSiteId.value && websites.value.length) {
+    selectedSiteId.value = websites.value[0].id
   }
 }
 
@@ -131,7 +180,7 @@ async function onInstallDone() {
 async function startService() {
   serviceLoading.value = true
   try {
-    await api.post(`/software/${APP_KEY}/start`)
+    await api.post(`/software/${appKey.value}/start`)
     ElMessage.success(t('productAnalytics.started'))
     await loadStatus()
   } catch (e: any) {
@@ -155,7 +204,7 @@ async function uninstallAbTool() {
   }
   uninstalling.value = true
   try {
-    await api.post(`/software/${APP_KEY}/uninstall`)
+    await api.post(`/software/${appKey.value}/uninstall`)
     ElMessage.success(t('productAnalytics.uninstallDone'))
     await refreshAll()
   } catch (e: any) {
@@ -168,7 +217,7 @@ async function uninstallAbTool() {
 async function stopService() {
   serviceLoading.value = true
   try {
-    await api.post(`/software/${APP_KEY}/stop`)
+    await api.post(`/software/${appKey.value}/stop`)
     ElMessage.success(t('productAnalytics.stopped'))
     await loadStatus()
   } catch (e: any) {
@@ -217,7 +266,16 @@ watch(selectedSiteId, (id) => {
 })
 
 watch(
-  () => [trackingForm.value.product_analytics_client_id, trackingForm.value.product_analytics_api_url],
+  () => route.query.provider,
+  (q) => {
+    const p = String(q || '')
+    if (p === 'posthog' || p === 'openpanel') setProvider(p as 'openpanel' | 'posthog')
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [trackingForm.value.product_analytics_client_id, trackingForm.value.product_analytics_api_url, analyticsProvider.value],
   () => loadSnippet(),
 )
 
@@ -233,6 +291,16 @@ onMounted(refreshAll)
       </div>
       <el-button :icon="RefreshRight" :loading="loading" @click="refreshAll">{{ t('common.refresh') }}</el-button>
     </div>
+
+    <el-segmented v-model="analyticsProvider" :options="[
+      { label: t('productAnalytics.providerOpenPanel'), value: 'openpanel' },
+      { label: t('productAnalytics.providerPosthog'), value: 'posthog' },
+    ]" class="provider-switch mb" @change="setProvider(analyticsProvider)" />
+
+    <el-alert v-if="isPosthog && status.hint" type="warning" :closable="false" show-icon class="mb">
+      {{ status.hint }}
+      <span v-if="status.min_ram_gb"> ({{ t('productAnalytics.minRam', { gb: status.min_ram_gb }) }})</span>
+    </el-alert>
 
     <div class="metric-strip">
       <div class="metric-card">
@@ -272,10 +340,16 @@ onMounted(refreshAll)
 
         <!-- Deploy -->
         <template v-if="col.key === 'deploy'">
-          <p class="kanban-desc">{{ t('productAnalytics.kanbanDeployDesc') }}</p>
+          <p class="kanban-desc">{{ isPosthog ? t('productAnalytics.kanbanDeployDescPosthog') : t('productAnalytics.kanbanDeployDesc') }}</p>
           <div class="kanban-meta">
-            <div><span class="muted">{{ t('productAnalytics.apiUrl') }}</span> <code>{{ status.api_url }}</code></div>
+            <div><span class="muted">{{ t('productAnalytics.apiUrl') }}</span> <code>{{ isPosthog ? status.api_host : status.api_url }}</code></div>
           </div>
+          <el-table v-if="isPosthog && posthogFeatures.length" :data="posthogFeatures" size="small" stripe class="mb">
+            <el-table-column prop="name" :label="t('productAnalytics.featureCol')" />
+            <el-table-column :label="t('common.status')" width="90">
+              <template #default="{ row }"><el-tag size="small" type="success">{{ row.enabled ? t('common.yes') : t('common.no') }}</el-tag></template>
+            </el-table-column>
+          </el-table>
           <div class="kanban-actions">
             <el-button
               v-if="!status.installed"
@@ -331,10 +405,10 @@ onMounted(refreshAll)
             <el-form-item :label="t('productAnalytics.enabled')">
               <el-switch v-model="trackingForm.product_analytics_enabled" :disabled="!deployReady" />
             </el-form-item>
-            <el-form-item :label="t('productAnalytics.clientId')">
+            <el-form-item :label="apiFieldLabel">
               <el-input
                 v-model="trackingForm.product_analytics_client_id"
-                :placeholder="t('productAnalytics.clientIdHint')"
+                :placeholder="apiFieldHint"
                 :disabled="!deployReady"
               />
             </el-form-item>
@@ -350,7 +424,10 @@ onMounted(refreshAll)
         <!-- Test -->
         <template v-else-if="col.key === 'test'">
           <p class="kanban-desc">{{ t('productAnalytics.kanbanTestDesc') }}</p>
-          <ul class="feature-list">
+          <ul v-if="isPosthog" class="feature-list">
+            <li v-for="f in posthogFeatures" :key="f.key">{{ f.name }}</li>
+          </ul>
+          <ul v-else class="feature-list">
             <li>{{ t('productAnalytics.featureAB') }}</li>
             <li>{{ t('productAnalytics.featureFunnels') }}</li>
             <li>{{ t('productAnalytics.featureReplay') }}</li>
@@ -376,7 +453,7 @@ onMounted(refreshAll)
 
     <SoftwareInstallLogDialog
       v-model="installLogVisible"
-      :app-key="APP_KEY"
+      :app-key="appKey"
       :app-name="t('productAnalytics.toolName')"
       :trigger-install="installTrigger"
       @done="onInstallDone"

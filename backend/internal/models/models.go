@@ -104,6 +104,7 @@ type Website struct {
 	ProductAnalyticsEnabled  bool   `gorm:"default:false" json:"product_analytics_enabled"`
 	ProductAnalyticsClientID string `gorm:"size:128" json:"product_analytics_client_id"`
 	ProductAnalyticsAPIURL   string `gorm:"size:512" json:"product_analytics_api_url"`
+	AnalyticsProvider       string `gorm:"size:32;default:openpanel" json:"analytics_provider"`
 }
 
 // WebsiteSubdir 子目录绑定

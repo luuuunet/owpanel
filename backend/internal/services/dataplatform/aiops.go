@@ -20,6 +20,7 @@ type AIOpsSummary struct {
 	LogSources      int                   `json:"log_sources"`
 	ErrorLines      int                   `json:"error_lines"`
 	LogInsights     []LogInsight          `json:"log_insights"`
+	GrowthPlatforms []GrowthPlatform      `json:"growth_platforms"`
 	AlertHint       string                `json:"alert_hint"`
 	Hint            string                `json:"hint,omitempty"`
 }
@@ -61,6 +62,7 @@ func (s *Service) AIOps() AIOpsSummary {
 			}
 		}
 	}
+	out.GrowthPlatforms = s.GrowthPlatforms()
 	metricsHealthy := 0
 	for _, m := range metrics {
 		if m.Running && m.Healthy {

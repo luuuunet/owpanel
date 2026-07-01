@@ -86,6 +86,9 @@ func appInstalledOnDisk(key, dataDir string) bool {
 	if key == openpanelAppKey {
 		return OpenpanelInstalled(dataDir)
 	}
+	if key == posthogAppKey {
+		return PosthogInstalled(dataDir)
+	}
 	return false
 }
 

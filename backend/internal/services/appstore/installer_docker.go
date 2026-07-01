@@ -16,6 +16,9 @@ func tryDockerInstall(key, version, installPath, dataDir string) (bool, error) {
 	if ok, err := tryOpenpanelInstall(key, version, installPath, dataDir); ok {
 		return true, err
 	}
+	if ok, err := tryPosthogInstall(key, version, installPath, dataDir); ok {
+		return true, err
+	}
 	if key == "docker" {
 		_ = version
 		_ = installPath
@@ -39,6 +42,9 @@ func tryDockerInstall(key, version, installPath, dataDir string) (bool, error) {
 
 func tryDockerUninstall(key, dataDir string) (bool, error) {
 	if ok, err := tryOpenpanelUninstall(key, dataDir); ok {
+		return true, err
+	}
+	if ok, err := tryPosthogUninstall(key, dataDir); ok {
 		return true, err
 	}
 	spec, ok := dockerSpec(key)
@@ -66,6 +72,15 @@ func tryDockerStatus(key, dataDir string) (bool, string) {
 			return false, ""
 		}
 		if OpenpanelComposeStatus(dataDir) == "running" {
+			return true, "running"
+		}
+		return true, "stopped"
+	}
+	if key == posthogAppKey {
+		if !PosthogInstalled(dataDir) {
+			return false, ""
+		}
+		if PosthogComposeStatus(dataDir) == "running" {
 			return true, "running"
 		}
 		return true, "stopped"

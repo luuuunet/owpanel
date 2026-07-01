@@ -26,6 +26,14 @@ type FeaturedPack struct {
 func FeaturedCatalog() []FeaturedPack {
 	return []FeaturedPack{
 		{
+			ID: "posthog-growth", Name: "PostHog", NameEN: "PostHog",
+			Description: "开源产品分析平台：会话回放、Feature Flags、A/B 实验、问卷、错误追踪",
+			DescriptionEN: "Open-source product analytics: session replay, feature flags, A/B, surveys, error tracking",
+			Category: "analytics", Icon: "DataAnalysis", Accent: "#f54e00",
+			AppKey: "posthog", ConfigRoute: "/product-analytics?provider=posthog",
+			Tags: []string{"PostHog", "分析", "A/B"},
+		},
+		{
 			ID: "openpanel-analytics", Name: "网站产品分析", NameEN: "Product Analytics",
 			Description: "漏斗、会话回放、用户分群与 A/B 测试，深度洞察站点转化",
 			DescriptionEN: "Funnels, session replay, cohorts, and A/B testing for your sites",

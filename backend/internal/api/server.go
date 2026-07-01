@@ -61,6 +61,7 @@ import (
 	"github.com/luuuunet/owpanel/internal/services/performance"
 	"github.com/luuuunet/owpanel/internal/services/process"
 	"github.com/luuuunet/owpanel/internal/services/productanalytics"
+	"github.com/luuuunet/owpanel/internal/services/posthog"
 	"github.com/luuuunet/owpanel/internal/services/security"
 	"github.com/luuuunet/owpanel/internal/services/settings"
 	"github.com/luuuunet/owpanel/internal/services/ssl"
@@ -105,6 +106,7 @@ type Server struct {
 	cache       *cache.Service
 	analytics   *analytics.Service
 	productAnalytics *productanalytics.Service
+	posthog         *posthog.Service
 	mail        *mail.Service
 	dns         *dns.Service
 	wordpress   *wordpress.Service
@@ -369,6 +371,7 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 		cache:      cacheSvc,
 		analytics: analytics.NewService(db, cfg.DataDir, wafSvc, perfSvc),
 		productAnalytics: productanalytics.NewService(db, cfg.DataDir, settingsSvc),
+		posthog:          posthog.NewService(cfg.DataDir, settingsSvc),
 		mail:      mailSvc,
 		dns:       dnsSvc,
 		wordpress: wpSvc,
@@ -651,6 +654,7 @@ func (s *Server) registerRoutes(r gin.IRouter, engine *gin.Engine, safePath stri
 				s.registerWebserverRoutes(web)
 				s.registerAnalyticsRoutes(web)
 				s.registerProductAnalyticsRoutes(web)
+				s.registerPosthogRoutes(web)
 			}
 
 			dbRoutes := authorized.Group("")

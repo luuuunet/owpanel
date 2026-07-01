@@ -43,7 +43,7 @@
 | Category | Features |
 |----------|----------|
 | 📊 **Overview** | Dashboard, CPU/memory/disk/network monitoring, health score, global traffic map, one-click optimize |
-| 🌐 **Websites** | Virtual hosts (Nginx/OpenResty), SSL, rewrite/redirect, WordPress toolkit, A/B testing |
+| 🌐 **Websites** | Virtual hosts (Nginx/OpenResty), SSL, rewrite/redirect, WordPress toolkit, A/B analytics, **PostHog** product analytics |
 | ⚙️ **Runtimes** | PHP multi-version, Node.js / Java / Go / Rust / Python / .NET, PM2 / Docker |
 | 🗄️ **Databases** | MySQL/MariaDB, PostgreSQL (incl. extensions), MongoDB, Redis, backup & restore |
 | 🐳 **Containers** | Docker containers/images/volumes/networks, Compose projects, Portainer & templates |

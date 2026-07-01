@@ -35,3 +35,4 @@ jobs:
           files: |
             dist/owpanel-linux-amd64.tar.gz
             dist/owpanel-linux-arm64.tar.gz
+            dist/owpanel-stack-scripts.tar.gz

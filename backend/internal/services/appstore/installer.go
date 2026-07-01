@@ -241,6 +241,9 @@ func runServiceAction(key, action, dataDir string) error {
 	if ok, err := tryOpenpanelServiceAction(key, action, dataDir); ok {
 		return err
 	}
+	if ok, err := tryPosthogServiceAction(key, action, dataDir); ok {
+		return err
+	}
 	if ok, err := tryDataPlatformServiceAction(key, action, dataDir); ok {
 		return err
 	}

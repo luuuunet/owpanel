@@ -87,12 +87,14 @@ func installMySQLApt(version, installPath, dataDir string) error {
 	logInstallLine(fmt.Sprintf("步骤 1/2：配置 Oracle MySQL %s 官方源并安装 …", version))
 	if err := setupMySQLAptRepo(version); err != nil {
 		logInstallLine(fmt.Sprintf("Oracle MySQL 官方源配置失败: %v", err))
+		platform.RemoveBrokenMySQLAptRepos()
 	} else {
 		presetMySQLCommunityDebconf()
 		if err := runAptInstall(pkgs...); err == nil {
 			return startMySQLServiceLinux()
 		}
 		logInstallLine(fmt.Sprintf("Oracle MySQL %s 官方包安装失败: %v", version, err))
+		platform.RemoveBrokenMySQLAptRepos()
 	}
 
 	return installMariaDBFallback(version, fmt.Errorf("oracle mysql %s unavailable", version))
@@ -103,18 +105,19 @@ func installMariaDBFallback(version string, cause error) error {
 	if platform.Detect().OSFamily != "debian" && platform.Detect().OSFamily != "ubuntu" {
 		return cause
 	}
+	platform.RemoveBrokenMySQLAptRepos()
 	platform.SanitizeBrokenAptRepos()
-	logInstallLine(fmt.Sprintf("步骤 2/2：MySQL %s 官方安装失败 (%v)，从 GitHub 拉取 MariaDB stack 脚本 …", version, cause))
+	logInstallLine(fmt.Sprintf("步骤 2/2：Oracle MySQL %s 不可用 (%v)，改用 MariaDB（MySQL 兼容）…", version, cause))
 	if err := runStackFallback("mariadb"); err == nil {
-		logInstallLine("已通过 GitHub stack 脚本安装 MariaDB（MySQL 兼容）")
+		logInstallLine("已通过 stack 脚本安装 MariaDB（MySQL 兼容）")
 		return startMySQLService("mariadb")
 	}
-	logInstallLine("GitHub stack 脚本未成功，尝试系统源 mariadb-server …")
+	logInstallLine("stack 脚本未成功，尝试系统源 mariadb-server …")
 	if err := platform.AptGetUpdate("-qq"); err != nil {
-		return fmt.Errorf("%w; apt update after MariaDB stack: %v", cause, err)
+		return fmt.Errorf("MariaDB 安装失败（apt 源仍不可用）: %w; 原始原因: %v", err, cause)
 	}
 	if err := runAptInstall("mariadb-server"); err != nil {
-		return cause
+		return fmt.Errorf("MariaDB 安装失败: %w; Oracle MySQL 官方源在 Ubuntu 24.04 上常因 GPG 过期失败，可稍后重试或手动安装 mariadb-server", err)
 	}
 	logInstallLine("已安装 MariaDB（MySQL 兼容，系统源）")
 	return startMySQLService("mariadb")
@@ -182,7 +185,11 @@ func mysqlAptServerSelect(version string) string {
 
 func setupMySQLAptRepo(version string) error {
 	if mysqlAptRepoConfigured() {
-		return runAptGet("update", "-qq")
+		if err := runAptGet("update", "-qq"); err != nil {
+			platform.RemoveBrokenMySQLAptRepos()
+			return err
+		}
+		return nil
 	}
 	if err := installMySQLAptPrereqs(); err != nil {
 		return fmt.Errorf("安装依赖: %w", err)
@@ -195,7 +202,12 @@ func setupMySQLAptRepo(version string) error {
 	if err := dpkgInstallNonInteractive(debPath); err != nil {
 		return err
 	}
-	return runAptGet("update", "-qq")
+	_ = platform.RefreshMySQLGPGKey()
+	if err := runAptGet("update", "-qq"); err != nil {
+		platform.RemoveBrokenMySQLAptRepos()
+		return fmt.Errorf("apt-get update: %w", err)
+	}
+	return nil
 }
 
 func mysqlAptRepoConfigured() bool {

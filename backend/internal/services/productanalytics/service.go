@@ -37,6 +37,7 @@ type WebsiteConfig struct {
 	ProductAnalyticsEnabled  bool   `json:"product_analytics_enabled"`
 	ProductAnalyticsClientID string `json:"product_analytics_client_id"`
 	ProductAnalyticsAPIURL   string `json:"product_analytics_api_url"`
+	AnalyticsProvider       string `json:"analytics_provider"`
 }
 
 func NewService(db *gorm.DB, dataDir string, settingsSvc *settings.Service) *Service {
@@ -113,6 +114,9 @@ func (s *Service) UpdateWebsiteConfig(siteID uint, req WebsiteConfig) (*models.W
 		"product_analytics_enabled":   req.ProductAnalyticsEnabled,
 		"product_analytics_client_id": strings.TrimSpace(req.ProductAnalyticsClientID),
 		"product_analytics_api_url":   strings.TrimSpace(req.ProductAnalyticsAPIURL),
+	}
+	if p := strings.TrimSpace(req.AnalyticsProvider); p != "" {
+		updates["analytics_provider"] = p
 	}
 	if err := s.db.Model(&site).Updates(updates).Error; err != nil {
 		return nil, err

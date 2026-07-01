@@ -33,6 +33,25 @@ detect_os() {
   [[ -n "$PKG" ]] || die "unsupported OS: $OS_PRETTY"
 }
 
+apt_sanitize_mysql_repos() {
+  local f removed=0
+  shopt -s nullglob
+  for f in /etc/apt/sources.list.d/*mysql* /etc/apt/sources.list.d/mysql*.list; do
+    [[ -f "$f" ]] || continue
+    log "removing broken MySQL apt list: $(basename "$f")"
+    rm -f "$f"
+    removed=1
+  done
+  shopt -u nullglob
+  if grep -rl 'repo.mysql.com' /etc/apt/sources.list.d/ 2>/dev/null | grep -q .; then
+    rm -f /etc/apt/sources.list.d/*mysql* 2>/dev/null || true
+    removed=1
+  fi
+  if [[ "$removed" == "1" ]]; then
+    DEBIAN_FRONTEND=noninteractive apt-get remove -y --purge mysql-apt-config 2>/dev/null || true
+  fi
+}
+
 apt_sanitize_known_bad_repos() {
   local f changed=0
   shopt -s nullglob
@@ -58,6 +77,12 @@ apt_update() {
   if grep -qE 'mongodb.org|does not have a Release file' /tmp/owpanel-apt.err 2>/dev/null; then
     log "removing broken MongoDB apt lists so other packages can install …"
     rm -f /etc/apt/sources.list.d/mongodb-org-*.list
+    apt-get update -qq
+    return $?
+  fi
+  if grep -qE 'repo\.mysql\.com|EXPKEYSIG.*[Mm]ysql|mysql.*not signed' /tmp/owpanel-apt.err 2>/dev/null; then
+    log "removing broken Oracle MySQL apt lists (expired GPG on Ubuntu 24.04) …"
+    apt_sanitize_mysql_repos
     apt-get update -qq
     return $?
   fi
