@@ -11,6 +11,7 @@ import (
 
 	"github.com/luuuunet/owpanel/internal/models"
 	"github.com/luuuunet/owpanel/internal/services/domaincheck"
+	"github.com/luuuunet/owpanel/internal/services/php"
 	"github.com/luuuunet/owpanel/internal/services/sitepurge"
 	"gorm.io/gorm"
 )
@@ -96,6 +97,9 @@ func (s *Service) Create(req *CreateRequest) (*CreateResult, error) {
 	usePHP := phpVer != "" && phpVer != "static"
 	if phpVer == "" {
 		phpVer = "static"
+	}
+	if usePHP {
+		phpVer = php.ResolveVersion(phpVer)
 	}
 	projectType := "php"
 	if phpVer == "static" {

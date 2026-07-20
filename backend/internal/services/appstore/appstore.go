@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -62,6 +63,14 @@ var catalog = []catalogItem{
 	{
 		App: models.App{Key: "mongodb", Name: "MongoDB", Category: "数据库", Versions: "7.0,6.0", Version: "7.0", Description: "MongoDB 文档数据库", Port: 27017, InstallPath: "server/mongodb", ConfigPath: "/etc/mongod.conf", Icon: "Coin"},
 		defaultConfig: map[string]interface{}{"storage.dbPath": "server/mongodb/data", "net.port": 27017},
+	},
+	{
+		App: models.App{Key: "php85", Name: "PHP-8.5", Category: "运行环境", Versions: "8.5", Version: "8.5", Description: "PHP 8.5 运行环境", Port: 9000, InstallPath: "server/php/85", ConfigPath: "server/php/85/etc/php.ini", Icon: "Coffee"},
+		defaultConfig: map[string]interface{}{"memory_limit": "128M", "upload_max_filesize": "50M", "post_max_size": "50M", "max_execution_time": "300", "date.timezone": "Asia/Shanghai", "open_basedir": "", "disable_functions": "exec,passthru,shell_exec,system,proc_open,popen"},
+	},
+	{
+		App: models.App{Key: "php84", Name: "PHP-8.4", Category: "运行环境", Versions: "8.4", Version: "8.4", Description: "PHP 8.4 运行环境", Port: 9004, InstallPath: "server/php/84", ConfigPath: "server/php/84/etc/php.ini", Icon: "Coffee"},
+		defaultConfig: map[string]interface{}{"memory_limit": "128M", "upload_max_filesize": "50M", "post_max_size": "50M", "max_execution_time": "300", "date.timezone": "Asia/Shanghai", "open_basedir": "", "disable_functions": "exec,passthru,shell_exec,system,proc_open,popen"},
 	},
 	{
 		App: models.App{Key: "php83", Name: "PHP-8.3", Category: "运行环境", Versions: "8.3", Version: "8.3", Description: "PHP 8.3 运行环境", Port: 9000, InstallPath: "server/php/83", ConfigPath: "server/php/83/etc/php.ini", Icon: "Coffee"},
@@ -445,12 +454,20 @@ type PHPVersionInfo struct {
 func (s *Service) ListPHPVersions() []PHPVersionInfo {
 	s.ensureCatalog()
 	mgr := php.NewManager(s.dataDir)
+	seen := map[string]bool{}
 	var out []PHPVersionInfo
 	for _, item := range mergedCatalog() {
 		if !strings.HasPrefix(item.Key, "php") || item.Key == "phpmyadmin" {
 			continue
 		}
-		if !s.phpVersionInstalledForListing(item.Key) {
+		systemPresent := false
+		for _, v := range php.DiscoverInstalledVersions() {
+			if v == item.Version {
+				systemPresent = true
+				break
+			}
+		}
+		if !s.phpVersionInstalledForListing(item.Key) && !systemPresent {
 			continue
 		}
 		st := mgr.Status(item.Key)
@@ -458,18 +475,55 @@ func (s *Service) ListPHPVersions() []PHPVersionInfo {
 		if st.Running {
 			status = "running"
 		}
+		if !st.Running && systemPresent {
+			// System FPM may run under a unit Status() doesn't map when catalog key differs.
+			if out2, err := execSystemctlActive("php" + item.Version + "-fpm"); err == nil && out2 {
+				st.Running = true
+				status = "running"
+			}
+		}
 		binary := st.Binary
 		if binary == "" {
 			binary = phpBinaryForKey(item.Key, s.dataDir)
 		}
+		pref := php.PreferredInstalledVersion()
 		out = append(out, PHPVersionInfo{
 			Key: item.Key, Version: item.Version, Status: status,
-			Default: item.Key == "php83", Port: st.Port, PID: st.PID,
+			Default: item.Version == pref, Port: st.Port, PID: st.PID,
 			Mode: st.Mode, Binary: binary, InstallPath: binary,
 			Message: st.Message, Installed: true,
 		})
+		seen[item.Version] = true
+	}
+	// Include system PHP versions not in catalog (e.g. Ubuntu ships 8.5).
+	for _, ver := range php.DiscoverInstalledVersions() {
+		if seen[ver] {
+			continue
+		}
+		key := "php" + strings.ReplaceAll(ver, ".", "")
+		st := mgr.Status(key)
+		status := "stopped"
+		if st.Running {
+			status = "running"
+		} else if ok, _ := execSystemctlActive("php" + ver + "-fpm"); ok {
+			status = "running"
+		}
+		out = append(out, PHPVersionInfo{
+			Key: key, Version: ver, Status: status,
+			Default: ver == php.PreferredInstalledVersion(),
+			Port:    st.Port, PID: st.PID, Mode: st.Mode, Binary: st.Binary,
+			Installed: true,
+		})
 	}
 	return out
+}
+
+func execSystemctlActive(unit string) (bool, error) {
+	out, err := exec.Command("systemctl", "is-active", unit).Output()
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(string(out)) == "active", nil
 }
 
 func (s *Service) Get(key string) (*models.App, error) {

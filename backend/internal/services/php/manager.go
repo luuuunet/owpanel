@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -14,15 +15,15 @@ import (
 )
 
 var versionPorts = map[string]int{
-	"8.3": 9000, "8.2": 9001, "8.1": 9002, "7.4": 9003,
-	"8.4": 9004, "8.0": 9005, "7.3": 9006, "7.2": 9007,
+	"8.5": 9000, "8.4": 9004, "8.3": 9000, "8.2": 9001, "8.1": 9002, "7.4": 9003,
+	"8.0": 9005, "7.3": 9006, "7.2": 9007,
 	"7.1": 9008, "7.0": 9009, "5.6": 9010, "5.5": 9011,
 	"5.4": 9012, "5.3": 9013,
 }
 
 var keyVersions = map[string]string{
-	"php83": "8.3", "php82": "8.2", "php81": "8.1", "php74": "7.4",
-	"php84": "8.4", "php80": "8.0", "php73": "7.3", "php72": "7.2",
+	"php85": "8.5", "php84": "8.4", "php83": "8.3", "php82": "8.2", "php81": "8.1", "php74": "7.4",
+	"php80": "8.0", "php73": "7.3", "php72": "7.2",
 	"php71": "7.1", "php70": "7.0", "php56": "5.6", "php55": "5.5",
 	"php54": "5.4", "php53": "5.3",
 }
@@ -68,13 +69,121 @@ func PortForVersion(ver string) int {
 
 // FastCGIBackend returns nginx fastcgi_pass target (unix socket on Linux when available).
 func FastCGIBackend(version string) string {
+	version = ResolveVersion(version)
 	if runtime.GOOS == "linux" {
-		sock := fmt.Sprintf("/run/php/php%s-fpm.sock", version)
-		if _, err := os.Stat(sock); err == nil {
-			return "unix:" + sock
+		candidates := []string{
+			fmt.Sprintf("/run/php/php%s-fpm.sock", version),
+			"/run/php/php-fpm.sock",
+			fmt.Sprintf("/var/run/php/php%s-fpm.sock", version),
+			"/var/run/php/php-fpm.sock",
+		}
+		for _, sock := range candidates {
+			if _, err := os.Stat(sock); err == nil {
+				return "unix:" + sock
+			}
+		}
+		// Last resort: any installed php*-fpm.sock (e.g. site set to 8.3 but only 8.5 installed).
+		if matches, err := filepath.Glob("/run/php/php*-fpm.sock"); err == nil {
+			for _, sock := range matches {
+				base := filepath.Base(sock)
+				if base == "php-fpm.sock" {
+					continue
+				}
+				return "unix:" + sock
+			}
 		}
 	}
 	return fmt.Sprintf("127.0.0.1:%d", PortForVersion(version))
+}
+
+// DiscoverInstalledVersions lists PHP versions with a local FPM socket or /etc/php tree.
+func DiscoverInstalledVersions() []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(ver string) {
+		ver = strings.TrimSpace(ver)
+		if ver == "" || seen[ver] {
+			return
+		}
+		seen[ver] = true
+		out = append(out, ver)
+	}
+	if runtime.GOOS == "linux" {
+		for _, pattern := range []string{"/run/php/php*-fpm.sock", "/var/run/php/php*-fpm.sock"} {
+			matches, _ := filepath.Glob(pattern)
+			for _, sock := range matches {
+				base := filepath.Base(sock)
+				if base == "php-fpm.sock" {
+					continue
+				}
+				// php8.5-fpm.sock → 8.5
+				name := strings.TrimSuffix(base, "-fpm.sock")
+				name = strings.TrimPrefix(name, "php")
+				add(name)
+			}
+		}
+		entries, _ := os.ReadDir("/etc/php")
+		for _, e := range entries {
+			if e.IsDir() && fileExists(filepath.Join("/etc/php", e.Name(), "fpm")) {
+				add(e.Name())
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return phpVersionLess(out[j], out[i]) // descending: newest first
+	})
+	return out
+}
+
+// PreferredInstalledVersion returns the newest installed PHP, or "8.3" as a soft default.
+func PreferredInstalledVersion() string {
+	if vers := DiscoverInstalledVersions(); len(vers) > 0 {
+		return vers[0]
+	}
+	return "8.3"
+}
+
+// ResolveVersion maps a requested PHP version to one that can actually serve FastCGI.
+func ResolveVersion(requested string) string {
+	req := strings.TrimSpace(requested)
+	if req == "" || req == "static" {
+		return PreferredInstalledVersion()
+	}
+	if runtime.GOOS == "linux" {
+		for _, sock := range []string{
+			fmt.Sprintf("/run/php/php%s-fpm.sock", req),
+			fmt.Sprintf("/var/run/php/php%s-fpm.sock", req),
+		} {
+			if _, err := os.Stat(sock); err == nil {
+				return req
+			}
+		}
+		if fileExists(filepath.Join("/etc/php", req, "fpm")) {
+			return req
+		}
+		if pref := PreferredInstalledVersion(); pref != "" {
+			return pref
+		}
+	}
+	return req
+}
+
+func phpVersionLess(a, b string) bool {
+	ap := strings.Split(a, ".")
+	bp := strings.Split(b, ".")
+	for i := 0; i < len(ap) || i < len(bp); i++ {
+		avar, bvar := 0, 0
+		if i < len(ap) {
+			avar, _ = strconv.Atoi(ap[i])
+		}
+		if i < len(bp) {
+			bvar, _ = strconv.Atoi(bp[i])
+		}
+		if avar != bvar {
+			return avar < bvar
+		}
+	}
+	return false
 }
 
 func (m *Manager) Status(key string) Status {

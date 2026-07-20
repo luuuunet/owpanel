@@ -6,8 +6,24 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/luuuunet/owpanel/internal/api/response"
 	"github.com/luuuunet/owpanel/internal/extension"
+	"github.com/luuuunet/owpanel/internal/services/appstore"
+	"github.com/luuuunet/owpanel/internal/services/php"
 	"github.com/luuuunet/owpanel/internal/services/website"
 )
+
+func firstInstalledOrPreferredPHP(versions []appstore.PHPVersionInfo) string {
+	for _, p := range versions {
+		if p.Installed && p.Status == "running" {
+			return p.Version
+		}
+	}
+	for _, p := range versions {
+		if p.Installed {
+			return p.Version
+		}
+	}
+	return php.PreferredInstalledVersion()
+}
 
 func (s *Server) registerWebsiteRoutes(authorized *gin.RouterGroup) {
 	authorized.GET("/websites", s.handleListWebsites)
@@ -71,9 +87,10 @@ func (s *Server) handleWebsiteOptions(c *gin.Context) {
 		})
 	}
 	response.OK(c, gin.H{
-		"default_root": s.website.DefaultRootBase(),
-		"categories":   categories,
-		"php_versions": phpOpts,
+		"default_root":         s.website.DefaultRootBase(),
+		"default_php_version":  firstInstalledOrPreferredPHP(phpVersions),
+		"categories":           categories,
+		"php_versions":         phpOpts,
 		"ftp_options": []gin.H{
 			{"value": "none", "label": "不创建"},
 			{"value": "create", "label": "创建 FTP"},

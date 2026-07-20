@@ -9,6 +9,7 @@ import (
 
 	"github.com/luuuunet/owpanel/internal/models"
 	"github.com/luuuunet/owpanel/internal/services/domaincheck"
+	"github.com/luuuunet/owpanel/internal/services/php"
 )
 
 type UpdateRequest struct {
@@ -174,6 +175,9 @@ func (s *Service) UpdateSite(siteID uint, req *UpdateRequest) (*models.Website, 
 	if req.PhpVersion != nil {
 		v := strings.TrimSpace(*req.PhpVersion)
 		usePHP := v != "" && v != "static"
+		if usePHP {
+			v = php.ResolveVersion(v)
+		}
 		updates["php_version"] = v
 		updates["php"] = usePHP
 	}

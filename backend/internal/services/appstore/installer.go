@@ -33,6 +33,8 @@ var packageSpecs = map[string]packageSpec{
 	"redis":         {Apt: []string{"redis-server"}, Dnf: []string{"redis"}, Service: "redis-server", ServiceRpm: "redis"},
 	"mongodb":       {Apt: []string{}, Dnf: []string{"mongodb-org"}, Service: "mongod"},
 	"php83":         {Apt: []string{"php8.3-fpm", "php8.3-mysql", "php8.3-cli", "php8.3-common", "php8.3-xml", "php8.3-curl", "php8.3-mbstring"}, Dnf: []string{"php-fpm", "php-mysqlnd", "php-cli", "php-xml", "php-mbstring"}, Service: "php8.3-fpm", ServiceRpm: "php-fpm", WinPackages: []string{"PHP.PHP.8.3"}},
+	"php85":         {Apt: []string{"php8.5-fpm", "php8.5-mysql", "php8.5-cli", "php8.5-common", "php8.5-xml", "php8.5-curl", "php8.5-mbstring"}, Dnf: []string{"php-fpm", "php-mysqlnd", "php-cli", "php-xml", "php-mbstring"}, Service: "php8.5-fpm", ServiceRpm: "php-fpm"},
+	"php84":         {Apt: []string{"php8.4-fpm", "php8.4-mysql", "php8.4-cli", "php8.4-common", "php8.4-xml", "php8.4-curl", "php8.4-mbstring"}, Service: "php8.4-fpm"},
 	"php82":         {Apt: []string{"php8.2-fpm", "php8.2-mysql", "php8.2-cli", "php8.2-common", "php8.2-xml", "php8.2-curl", "php8.2-mbstring"}, Service: "php8.2-fpm"},
 	"php81":         {Apt: []string{"php8.1-fpm", "php8.1-mysql", "php8.1-cli", "php8.1-common", "php8.1-xml", "php8.1-curl", "php8.1-mbstring"}, Service: "php8.1-fpm"},
 	"php80":         {Apt: []string{"php8.0-fpm", "php8.0-mysql", "php8.0-cli", "php8.0-common", "php8.0-xml", "php8.0-curl", "php8.0-mbstring"}, Service: "php8.0-fpm"},

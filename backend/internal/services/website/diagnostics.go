@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/luuuunet/owpanel/internal/services/php"
 )
 
 type SiteDiagnosticBundle struct {
@@ -194,11 +196,18 @@ func startPHPFPM(version string) error {
 	}
 	ver := strings.TrimSpace(version)
 	if ver == "" || ver == "static" {
-		ver = "8.3"
+		ver = php.PreferredInstalledVersion()
+	} else {
+		ver = php.ResolveVersion(ver)
 	}
 	svc := "php" + ver + "-fpm"
 	if out, err := exec.Command("systemctl", "start", svc).CombinedOutput(); err != nil {
-		return fmt.Errorf("%s: %s", svc, strings.TrimSpace(string(out)))
+		// Fallback: generic php-fpm unit (some distros).
+		if out2, err2 := exec.Command("systemctl", "start", "php-fpm").CombinedOutput(); err2 == nil {
+			return nil
+		} else {
+			return fmt.Errorf("%s: %s; php-fpm: %s", svc, strings.TrimSpace(string(out)), strings.TrimSpace(string(out2)))
+		}
 	}
 	return nil
 }

@@ -376,6 +376,19 @@ function openDialog() {
   dialogVisible.value = true
 }
 
+function pickDefaultPhpVersion(): string {
+  const list = options.value.php_versions || []
+  if (options.value.default_php_version) {
+    return options.value.default_php_version
+  }
+  const running = list.find((p: any) => p.value !== 'static' && p.installed !== false && p.status === 'running')
+  if (running?.value) return running.value
+  const installed = list.find((p: any) => p.value !== 'static' && p.installed !== false)
+  if (installed?.value) return installed.value
+  const anyPhp = list.find((p: any) => p.value !== 'static')
+  return anyPhp?.value || '8.3'
+}
+
 function resetForms() {
   const root = options.value.default_root || ''
   form.value = {
@@ -384,7 +397,7 @@ function resetForms() {
     root_path: root,
     ftp: 'create',
     database: 'none',
-    php_version: options.value.php_versions?.find((p: any) => p.value !== 'static')?.value || '8.3',
+    php_version: pickDefaultPhpVersion(),
     category: categoryOptions.value[0]?.value || '默认类别',
     dns_mode: 'manual',
     ssl: false,

@@ -21,6 +21,8 @@ var iconMetaOverrides = map[string]IconMeta{
 	"postgresql": {BG: "#336791", Label: "Pg"},
 	"redis": {BG: "#DC382D", Label: "R"},
 	"mongodb": {BG: "#47A248", Label: "Mg"},
+	"php85": {BG: "#777BB4", Label: "8.5"},
+	"php84": {BG: "#777BB4", Label: "8.4"},
 	"php83": {BG: "#777BB4", Label: "8.3"},
 	"php82": {BG: "#777BB4", Label: "8.2"},
 	"php81": {BG: "#777BB4", Label: "8.1"},
