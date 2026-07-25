@@ -11,6 +11,7 @@ import (
 	"github.com/luuuunet/owpanel/internal/api/response"
 	"github.com/luuuunet/owpanel/internal/auth"
 	"github.com/luuuunet/owpanel/internal/services/aichat"
+	"github.com/luuuunet/owpanel/internal/services/filemgr"
 )
 
 func (s *Server) registerFileRoutes(authorized *gin.RouterGroup) {
@@ -30,6 +31,11 @@ func (s *Server) registerFileRoutes(authorized *gin.RouterGroup) {
 	authorized.POST("/files/rename", s.handleRenameFile)
 	authorized.PATCH("/files/permissions", s.handleFilePermissions)
 	authorized.POST("/files/upload", s.handleUploadFile)
+	authorized.POST("/files/upload/init", s.handleUploadInit)
+	authorized.GET("/files/upload/status", s.handleUploadStatus)
+	authorized.POST("/files/upload/chunk", s.handleUploadChunk)
+	authorized.POST("/files/upload/complete", s.handleUploadComplete)
+	authorized.DELETE("/files/upload/:id", s.handleUploadCancel)
 	authorized.POST("/files/download-url", s.handleDownloadFromURL)
 	authorized.POST("/files/compress", s.handleCompressFiles)
 	authorized.POST("/files/extract", s.handleExtractFile)
@@ -293,6 +299,107 @@ func (s *Server) handleUploadFile(c *gin.Context) {
 	}
 	_ = s.authSvc.AddDiskUsage(c.GetUint("user_id"), auth.QuotaMBFromBytes(header.Size))
 	response.OK(c, gin.H{"path": target, "name": header.Filename})
+}
+
+func (s *Server) handleUploadInit(c *gin.Context) {
+	var req struct {
+		Path      string `json:"path" binding:"required"`
+		Filename  string `json:"filename" binding:"required"`
+		Size      int64  `json:"size"`
+		ChunkSize int64  `json:"chunk_size"`
+		UploadID  string `json:"upload_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, err.Error())
+		return
+	}
+	if err := s.authSvc.CheckDiskQuota(c.GetUint("user_id"), req.Size); err != nil {
+		response.Error(c, 403, err.Error())
+		return
+	}
+	st, err := s.filemgr.InitChunkUpload(req.Path, req.Filename, req.Size, req.ChunkSize, req.UploadID)
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.OK(c, st)
+}
+
+func (s *Server) handleUploadStatus(c *gin.Context) {
+	id := c.Query("upload_id")
+	if id == "" {
+		response.Error(c, 400, "upload_id required")
+		return
+	}
+	st, err := s.filemgr.GetChunkUploadStatus(id)
+	if err != nil {
+		response.Error(c, 404, err.Error())
+		return
+	}
+	response.OK(c, st)
+}
+
+func (s *Server) handleUploadChunk(c *gin.Context) {
+	id := c.PostForm("upload_id")
+	if id == "" {
+		id = c.Query("upload_id")
+	}
+	idxRaw := c.PostForm("index")
+	if idxRaw == "" {
+		idxRaw = c.Query("index")
+	}
+	index, err := filemgr.ParseChunkIndex(idxRaw)
+	if err != nil {
+		response.Error(c, 400, err.Error())
+		return
+	}
+	file, header, err := c.Request.FormFile("chunk")
+	if err != nil {
+		response.Error(c, 400, err.Error())
+		return
+	}
+	defer file.Close()
+	st, err := s.filemgr.PutChunk(id, index, file, header.Size)
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.OK(c, st)
+}
+
+func (s *Server) handleUploadComplete(c *gin.Context) {
+	var req struct {
+		UploadID string `json:"upload_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, err.Error())
+		return
+	}
+	st, err := s.filemgr.GetChunkUploadStatus(req.UploadID)
+	if err != nil {
+		response.Error(c, 404, err.Error())
+		return
+	}
+	if err := s.authSvc.CheckDiskQuota(c.GetUint("user_id"), st.Size); err != nil {
+		response.Error(c, 403, err.Error())
+		return
+	}
+	target, err := s.filemgr.CompleteChunkUpload(req.UploadID)
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	_ = s.authSvc.AddDiskUsage(c.GetUint("user_id"), auth.QuotaMBFromBytes(st.Size))
+	response.OK(c, gin.H{"path": target, "name": st.Filename, "size": st.Size})
+}
+
+func (s *Server) handleUploadCancel(c *gin.Context) {
+	id := c.Param("id")
+	if err := s.filemgr.CancelChunkUpload(id); err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.Message(c, "cancelled")
 }
 
 func (s *Server) handleDownloadFromURL(c *gin.Context) {

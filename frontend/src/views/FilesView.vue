@@ -1,6 +1,6 @@
 <script setup lang="ts">
 
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { useRoute } from 'vue-router'
 
@@ -10,13 +10,20 @@ import api from '@/api'
 
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+import type { UploadUserFile } from 'element-plus'
 import {
-  Folder, Document, Upload, FolderAdd, DocumentAdd, Refresh, EditPen, Delete,
-  Search, Star, StarFilled, Download, CopyDocument, Rank, Picture, DocumentCopy, Link,
+  Folder, Document, Upload, UploadFilled, FolderAdd, DocumentAdd, Refresh, EditPen, Delete,
+  Search, Star, StarFilled, Download, CopyDocument, Rank, Picture, DocumentCopy, Link, Grid, Menu,
 } from '@element-plus/icons-vue'
 
 import FileEditorWithChat from '@/components/FileEditorWithChat.vue'
 import { resolveSiteForPath } from '@/utils/siteFromPath'
+import {
+  cancelUploadSession,
+  createUploadItem,
+  uploadFileResumable,
+  type UploadBoardItem,
+} from '@/composables/useResumableUpload'
 
 
 
@@ -88,6 +95,7 @@ const compressFormat = ref('zip')
 const compressDest = ref('')
 
 const viewMode = ref<'files' | 'trash'>('files')
+const listLayout = ref<'table' | 'cards'>('table')
 const trashItems = ref<any[]>([])
 const trashLoading = ref(false)
 
@@ -460,6 +468,8 @@ async function loadDir(path?: string, keepEditor = false) {
 
     entries.value = res.data || []
 
+    entriesFingerprint = entriesSig(entries.value)
+
     dirPath.value = target
 
     pathInput.value = target
@@ -759,32 +769,147 @@ async function confirmPerm() {
 
 
 
-async function uploadRequest(opt: any) {
+const uploadVisible = ref(false)
+const uploadFileList = ref<UploadUserFile[]>([])
+const uploadLoading = ref(false)
+const uploadBoard = ref<UploadBoardItem[]>([])
+const uploadBoardOpen = ref(true)
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
+let entriesFingerprint = ''
 
-  const fd = new FormData()
+const uploadQueued = computed(() => uploadBoard.value.filter((i) => i.status === 'queued' || i.status === 'paused'))
+const uploadActive = computed(() => uploadBoard.value.filter((i) => i.status === 'uploading'))
+const uploadDone = computed(() => uploadBoard.value.filter((i) => i.status === 'done'))
+const uploadFailed = computed(() => uploadBoard.value.filter((i) => i.status === 'error'))
 
-  fd.append('file', opt.file)
+function openUpload() {
+  uploadFileList.value = []
+  uploadVisible.value = true
+}
 
-  fd.append('path', dirPath.value)
+function onUploadExceed() {
+  ElMessage.warning(t('files.uploadExceed'))
+}
 
-  try {
+function patchUploadItem(next: UploadBoardItem) {
+  const idx = uploadBoard.value.findIndex((i) => i.key === next.key)
+  if (idx >= 0) {
+    uploadBoard.value[idx] = { ...next }
+  }
+}
 
-    await api.post('/files/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-
-    ElMessage.success(t('files.uploaded'))
-
-    loadDir(dirPath.value, editorVisible.value)
-
-    opt.onSuccess?.({})
-
-  } catch (e: any) {
-
-    ElMessage.error(e?.error || t('files.uploadFailed'))
-
-    opt.onError?.(e)
-
+async function confirmUpload() {
+  const files = uploadFileList.value.map((f) => f.raw).filter(Boolean) as File[]
+  if (!files.length) {
+    ElMessage.warning(t('files.uploadEmpty'))
+    return
+  }
+  if (!dirPath.value) {
+    ElMessage.warning(t('files.uploadNoDir'))
+    return
   }
 
+  uploadVisible.value = false
+  uploadBoardOpen.value = true
+  uploadLoading.value = true
+
+  for (const file of files) {
+    const item = createUploadItem(file, dirPath.value)
+    const existing = uploadBoard.value.findIndex((i) => i.key === item.key)
+    if (existing >= 0) {
+      uploadBoard.value[existing] = item
+    } else {
+      uploadBoard.value.unshift(item)
+    }
+
+    try {
+      await uploadFileResumable(item, patchUploadItem)
+    } catch (e: any) {
+      item.status = 'error'
+      item.error = e?.error || e?.message || t('files.uploadFailed')
+      patchUploadItem(item)
+    }
+  }
+
+  uploadLoading.value = false
+  uploadFileList.value = []
+  const keys = new Set(files.map((f) => createUploadItem(f, dirPath.value).key))
+  const ok = uploadBoard.value.filter((i) => keys.has(i.key) && i.status === 'done').length
+  const fail = files.length - ok
+  if (ok > 0 && fail <= 0) {
+    ElMessage.success(t('files.uploadDone', { ok }))
+  } else if (ok > 0) {
+    ElMessage.warning(t('files.uploadPartial', { ok, fail }))
+  } else {
+    ElMessage.error(t('files.uploadFailed'))
+  }
+  await softRefreshDir()
+}
+
+async function resumeUploadItem(item: UploadBoardItem) {
+  if (!item.file) {
+    ElMessage.warning(t('files.uploadNeedReselect'))
+    openUpload()
+    return
+  }
+  item.status = 'queued'
+  item.error = undefined
+  patchUploadItem(item)
+  uploadLoading.value = true
+  try {
+    await uploadFileResumable(item, patchUploadItem)
+    await softRefreshDir()
+  } catch (e: any) {
+    item.status = 'error'
+    item.error = e?.error || e?.message || t('files.uploadFailed')
+    patchUploadItem(item)
+  } finally {
+    uploadLoading.value = false
+  }
+}
+
+async function removeUploadItem(item: UploadBoardItem) {
+  if (item.uploadId && item.status !== 'done') {
+    await cancelUploadSession(item.uploadId)
+  }
+  uploadBoard.value = uploadBoard.value.filter((i) => i.key !== item.key)
+}
+
+function clearFinishedUploads() {
+  uploadBoard.value = uploadBoard.value.filter((i) => i.status !== 'done')
+}
+
+function entriesSig(list: any[]): string {
+  return list.map((e) => `${e.name}|${e.size}|${e.mod_time}|${e.is_dir}`).join(';')
+}
+
+async function softRefreshDir() {
+  if (viewMode.value !== 'files' || !dirPath.value || editorVisible.value) return
+  try {
+    const res: any = await api.get('/files', { params: { path: dirPath.value } })
+    const next = res.data || []
+    const sig = entriesSig(next)
+    if (sig !== entriesFingerprint) {
+      entries.value = next
+      entriesFingerprint = sig
+    }
+  } catch {
+    /* keep current list */
+  }
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  autoRefreshTimer = setInterval(() => {
+    void softRefreshDir()
+  }, 4000)
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
+  }
 }
 
 function openUrlDownload() {
@@ -847,6 +972,11 @@ onMounted(async () => {
   } else {
     await loadDir(dirPath.value)
   }
+  startAutoRefresh()
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
 })
 
 watch(
@@ -857,6 +987,11 @@ watch(
     }
   },
 )
+
+watch(viewMode, (mode) => {
+  if (mode === 'files') startAutoRefresh()
+  else stopAutoRefresh()
+})
 
 </script>
 
@@ -903,11 +1038,15 @@ watch(
 
         <el-button :icon="Refresh" @click="loadDir(undefined, editorVisible)">{{ t('common.refresh') }}</el-button>
 
-        <el-upload :show-file-list="false" :http-request="uploadRequest" multiple>
+        <el-button type="primary" :icon="Upload" @click="openUpload">{{ t('files.upload') }}</el-button>
 
-          <el-button type="primary" :icon="Upload">{{ t('files.upload') }}</el-button>
-
-        </el-upload>
+        <el-button
+          v-if="uploadBoard.length"
+          :type="uploadBoardOpen ? 'warning' : 'default'"
+          @click="uploadBoardOpen = !uploadBoardOpen"
+        >
+          {{ t('files.uploadBoard') }} ({{ uploadBoard.length }})
+        </el-button>
 
         <el-button :icon="Link" @click="openUrlDownload">{{ t('files.downloadFromUrl') }}</el-button>
 
@@ -976,7 +1115,60 @@ watch(
 
     </el-card>
 
-
+    <el-card v-if="uploadBoardOpen && uploadBoard.length" class="upload-board-card">
+      <div class="upload-board-head">
+        <h3>{{ t('files.uploadBoardTitle') }}</h3>
+        <div class="upload-board-actions">
+          <el-tag size="small" type="info">{{ t('files.autoRefreshOn') }}</el-tag>
+          <el-button size="small" link type="primary" @click="clearFinishedUploads">{{ t('files.clearFinishedUploads') }}</el-button>
+          <el-button size="small" link @click="uploadBoardOpen = false">{{ t('common.close') }}</el-button>
+        </div>
+      </div>
+      <div class="upload-kanban">
+        <div class="upload-col">
+          <div class="upload-col-title">{{ t('files.uploadColQueued') }} ({{ uploadQueued.length }})</div>
+          <div v-for="item in uploadQueued" :key="item.key" class="upload-card">
+            <div class="upload-card-name" :title="item.name">{{ item.name }}</div>
+            <div class="upload-card-meta">{{ formatSize(item.size) }}</div>
+            <div class="upload-card-actions">
+              <el-button size="small" type="primary" @click="resumeUploadItem(item)">{{ t('files.uploadResume') }}</el-button>
+              <el-button size="small" text type="danger" @click="removeUploadItem(item)">{{ t('common.delete') }}</el-button>
+            </div>
+          </div>
+          <el-empty v-if="!uploadQueued.length" :image-size="48" :description="t('files.uploadColEmpty')" />
+        </div>
+        <div class="upload-col">
+          <div class="upload-col-title">{{ t('files.uploadColActive') }} ({{ uploadActive.length }})</div>
+          <div v-for="item in uploadActive" :key="item.key" class="upload-card uploading">
+            <div class="upload-card-name" :title="item.name">{{ item.name }}</div>
+            <el-progress :percentage="item.progress" :stroke-width="8" />
+            <div class="upload-card-meta">{{ formatSize(item.size) }}</div>
+          </div>
+          <el-empty v-if="!uploadActive.length" :image-size="48" :description="t('files.uploadColEmpty')" />
+        </div>
+        <div class="upload-col">
+          <div class="upload-col-title">{{ t('files.uploadColDone') }} ({{ uploadDone.length }})</div>
+          <div v-for="item in uploadDone" :key="item.key" class="upload-card done">
+            <div class="upload-card-name" :title="item.name">{{ item.name }}</div>
+            <div class="upload-card-meta">{{ formatSize(item.size) }} · 100%</div>
+            <el-button size="small" text @click="removeUploadItem(item)">{{ t('common.close') }}</el-button>
+          </div>
+          <el-empty v-if="!uploadDone.length" :image-size="48" :description="t('files.uploadColEmpty')" />
+        </div>
+        <div class="upload-col">
+          <div class="upload-col-title">{{ t('files.uploadColFailed') }} ({{ uploadFailed.length }})</div>
+          <div v-for="item in uploadFailed" :key="item.key" class="upload-card failed">
+            <div class="upload-card-name" :title="item.name">{{ item.name }}</div>
+            <div class="upload-card-error">{{ item.error || t('files.uploadFailed') }}</div>
+            <div class="upload-card-actions">
+              <el-button size="small" type="primary" @click="resumeUploadItem(item)">{{ t('files.uploadResume') }}</el-button>
+              <el-button size="small" text type="danger" @click="removeUploadItem(item)">{{ t('common.delete') }}</el-button>
+            </div>
+          </div>
+          <el-empty v-if="!uploadFailed.length" :image-size="48" :description="t('files.uploadColEmpty')" />
+        </div>
+      </div>
+    </el-card>
 
     <el-card>
 
@@ -984,9 +1176,23 @@ watch(
 
         <el-button size="small" @click="goUp">{{ t('files.parent') }}</el-button>
 
+        <el-radio-group v-model="listLayout" size="small" class="layout-toggle">
+          <el-radio-button value="table">
+            <el-icon><Menu /></el-icon>
+            {{ t('files.layoutTable') }}
+          </el-radio-button>
+          <el-radio-button value="cards">
+            <el-icon><Grid /></el-icon>
+            {{ t('files.layoutCards') }}
+          </el-radio-button>
+        </el-radio-group>
+
+        <span class="auto-refresh-hint">{{ t('files.autoRefreshHint') }}</span>
+
       </div>
 
       <el-table
+        v-if="listLayout === 'table'"
 
         :data="displayedEntries"
 
@@ -1075,6 +1281,31 @@ watch(
         </el-table-column>
 
       </el-table>
+
+      <div v-else class="file-cards">
+        <div
+          v-for="row in displayedEntries"
+          :key="row.path"
+          class="file-card"
+          @dblclick="row.is_dir ? loadDir(row.path, editorVisible) : (isImageName(row.name) ? openImagePreview(row) : openFile(row.path))"
+        >
+          <div class="file-card-icon">
+            <el-icon :size="36"><Folder v-if="row.is_dir" /><Document v-else /></el-icon>
+          </div>
+          <div class="file-card-name" :title="row.name">{{ row.name }}</div>
+          <div class="file-card-meta">
+            {{ row.is_dir ? t('files.openDir') : formatSize(row.size) }}
+            · {{ formatTime(row.mod_time) }}
+          </div>
+          <div class="file-card-actions">
+            <el-button v-if="!row.is_dir" size="small" :icon="Download" @click.stop="downloadFile(row.path, row.name)">{{ t('files.download') }}</el-button>
+            <el-button v-if="!row.is_dir" size="small" type="primary" @click.stop="openFile(row.path)">{{ t('files.editFile') }}</el-button>
+            <el-button v-else size="small" type="primary" @click.stop="loadDir(row.path, editorVisible)">{{ t('files.openDir') }}</el-button>
+            <el-button size="small" type="danger" @click.stop="deleteEntry(row)">{{ t('common.delete') }}</el-button>
+          </div>
+        </div>
+        <el-empty v-if="!displayedEntries.length" />
+      </div>
 
     </el-card>
 
@@ -1187,6 +1418,49 @@ watch(
     </el-dialog>
 
 
+
+    <el-dialog
+      v-model="uploadVisible"
+      :title="t('files.uploadTitle')"
+      width="560px"
+      destroy-on-close
+      class="files-upload-dialog"
+      @closed="uploadFileList = []"
+    >
+      <div class="upload-target">
+        <span class="upload-target-label">{{ t('files.uploadTarget') }}</span>
+        <code class="mono">{{ dirPath || '—' }}</code>
+      </div>
+      <el-upload
+        v-model:file-list="uploadFileList"
+        drag
+        multiple
+        :auto-upload="false"
+        :limit="50"
+        :disabled="uploadLoading"
+        :on-exceed="onUploadExceed"
+      >
+        <el-icon class="upload-drop-icon"><UploadFilled /></el-icon>
+        <div class="el-upload__text">
+          {{ t('files.uploadDropHint') }}
+        </div>
+        <template #tip>
+          <div class="el-upload__tip">{{ t('files.uploadTipResume') }}</div>
+        </template>
+      </el-upload>
+      <template #footer>
+        <el-button :disabled="uploadLoading" @click="uploadVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button
+          type="primary"
+          :icon="Upload"
+          :loading="uploadLoading"
+          :disabled="uploadFileList.length === 0"
+          @click="confirmUpload"
+        >
+          {{ t('files.uploadStart') }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="urlDownloadVisible" :title="t('files.downloadFromUrlTitle')" width="520px">
       <el-form label-width="100px" @submit.prevent="confirmUrlDownload">
@@ -1422,6 +1696,189 @@ watch(
 :deep(.file-editor-drawer .editor-with-chat) {
   flex: 1;
   min-height: 0;
+}
+
+.upload-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.upload-target-label {
+  flex-shrink: 0;
+}
+
+.upload-target .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-drop-icon {
+  font-size: 48px;
+  color: var(--el-color-primary);
+  margin-bottom: 8px;
+}
+
+.list-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.layout-toggle {
+  margin-left: 4px;
+}
+
+.auto-refresh-hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.upload-board-card :deep(.el-card__body) {
+  padding-top: 12px;
+}
+
+.upload-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.upload-board-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.upload-board-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-kanban {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .upload-kanban {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.upload-col {
+  background: var(--el-fill-color-lighter);
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 160px;
+}
+
+.upload-col-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--el-text-color-regular);
+}
+
+.upload-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.upload-card.uploading {
+  border-color: var(--el-color-primary-light-5);
+}
+
+.upload-card.done {
+  border-color: var(--el-color-success-light-5);
+}
+
+.upload-card.failed {
+  border-color: var(--el-color-danger-light-5);
+}
+
+.upload-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-card-meta,
+.upload-card-error {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
+}
+
+.upload-card-error {
+  color: var(--el-color-danger);
+}
+
+.upload-card-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.file-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.file-card {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  background: var(--el-bg-color);
+}
+
+.file-card:hover {
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.file-card-icon {
+  color: var(--el-color-primary);
+  margin-bottom: 8px;
+}
+
+.file-card-name {
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-card-meta {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin: 6px 0 10px;
+}
+
+.file-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 </style>
