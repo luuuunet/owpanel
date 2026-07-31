@@ -167,6 +167,43 @@ function isImageName(name: string) {
   return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico'].some((ext) => n.endsWith(ext))
 }
 
+const BINARY_EXTS = [
+  '.exe', '.dll', '.so', '.dylib', '.bin', '.o', '.a', '.lib', '.obj',
+  '.apk', '.aab', '.ipa', '.msi', '.dmg', '.iso', '.img', '.deb', '.rpm',
+  '.jar', '.war', '.ear', '.class', '.pyc', '.pyo', '.wasm', '.pdb',
+  '.zip', '.rar', '.7z', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.zst',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.tif', '.tiff',
+  '.mp3', '.mp4', '.avi', '.mov', '.mkv', '.webm', '.flac', '.wav', '.ogg',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.woff', '.woff2', '.ttf', '.otf', '.eot',
+  '.sqlite', '.db', '.dat', '.pak', '.crx',
+]
+
+function isBinaryName(name: string) {
+  const n = name.toLowerCase()
+  return BINARY_EXTS.some((ext) => n.endsWith(ext))
+}
+
+function isEditableFile(name: string) {
+  return !isBinaryName(name) && !isImageName(name)
+}
+
+function onEntryActivate(row: any) {
+  if (row.is_dir) {
+    void loadDir(row.path, editorVisible.value)
+    return
+  }
+  if (isImageName(row.name)) {
+    openImagePreview(row)
+    return
+  }
+  if (isBinaryName(row.name)) {
+    ElMessage.info(t('files.binaryNotEditable'))
+    return
+  }
+  void openFile(row.path)
+}
+
 function apiDownloadUrl(subpath: string) {
   const token = localStorage.getItem('token')
   const w = window as Window & { __OWPANEL_BASE__?: string }
@@ -507,6 +544,11 @@ function goPath() {
 
 
 async function openFile(path: string) {
+  const name = path.split(/[/\\]/).pop() || ''
+  if (isBinaryName(name) || isImageName(name)) {
+    ElMessage.info(t('files.binaryNotEditable'))
+    return
+  }
   try {
     void loadWebsitesForEditor()
     const info: any = await api.get('/files/info', { params: { path } })
@@ -809,6 +851,11 @@ async function confirmUpload() {
     return
   }
 
+  // Upload only — never open the editor for uploaded files.
+  editorVisible.value = false
+  editingPath.value = ''
+  fileContent.value = ''
+
   uploadVisible.value = false
   uploadBoardOpen.value = true
   uploadLoading.value = true
@@ -824,6 +871,8 @@ async function confirmUpload() {
 
     try {
       await uploadFileResumable(item, patchUploadItem)
+      // Refresh list after each finished file so it appears without page reload.
+      await loadDir(dirPath.value, true)
     } catch (e: any) {
       item.status = 'error'
       item.error = e?.error || e?.message || t('files.uploadFailed')
@@ -843,7 +892,7 @@ async function confirmUpload() {
   } else {
     ElMessage.error(t('files.uploadFailed'))
   }
-  await softRefreshDir()
+  await loadDir(dirPath.value, true)
 }
 
 async function resumeUploadItem(item: UploadBoardItem) {
@@ -858,7 +907,10 @@ async function resumeUploadItem(item: UploadBoardItem) {
   uploadLoading.value = true
   try {
     await uploadFileResumable(item, patchUploadItem)
-    await softRefreshDir()
+    editorVisible.value = false
+    editingPath.value = ''
+    fileContent.value = ''
+    await loadDir(dirPath.value, true)
   } catch (e: any) {
     item.status = 'error'
     item.error = e?.error || e?.message || t('files.uploadFailed')
@@ -884,7 +936,8 @@ function entriesSig(list: any[]): string {
 }
 
 async function softRefreshDir() {
-  if (viewMode.value !== 'files' || !dirPath.value || editorVisible.value) return
+  // Always refresh the directory listing in the background; do not open/close the editor.
+  if (viewMode.value !== 'files' || !dirPath.value) return
   try {
     const res: any = await api.get('/files', { params: { path: dirPath.value } })
     const next = res.data || []
@@ -1202,7 +1255,7 @@ watch(viewMode, (mode) => {
 
         max-height="620"
 
-        @row-dblclick="(row: any) => row.is_dir ? loadDir(row.path, editorVisible) : (isImageName(row.name) ? openImagePreview(row) : openFile(row.path))"
+        @row-dblclick="onEntryActivate"
 
         @selection-change="onSelectionChange"
 
@@ -1248,7 +1301,7 @@ watch(viewMode, (mode) => {
 
             <el-button
 
-              v-if="!row.is_dir"
+              v-if="!row.is_dir && isEditableFile(row.name)"
 
               type="primary"
 
@@ -1264,7 +1317,7 @@ watch(viewMode, (mode) => {
 
             </el-button>
 
-            <el-button v-else size="small" @click="loadDir(row.path, editorVisible)">{{ t('files.openDir') }}</el-button>
+            <el-button v-else-if="row.is_dir" size="small" @click="loadDir(row.path, editorVisible)">{{ t('files.openDir') }}</el-button>
 
             <el-button v-if="row.is_dir" size="small" @click="openFolderSize(row)">{{ t('files.folderSize') }}</el-button>
 
@@ -1287,7 +1340,7 @@ watch(viewMode, (mode) => {
           v-for="row in displayedEntries"
           :key="row.path"
           class="file-card"
-          @dblclick="row.is_dir ? loadDir(row.path, editorVisible) : (isImageName(row.name) ? openImagePreview(row) : openFile(row.path))"
+          @dblclick="onEntryActivate(row)"
         >
           <div class="file-card-icon">
             <el-icon :size="36"><Folder v-if="row.is_dir" /><Document v-else /></el-icon>
@@ -1299,8 +1352,8 @@ watch(viewMode, (mode) => {
           </div>
           <div class="file-card-actions">
             <el-button v-if="!row.is_dir" size="small" :icon="Download" @click.stop="downloadFile(row.path, row.name)">{{ t('files.download') }}</el-button>
-            <el-button v-if="!row.is_dir" size="small" type="primary" @click.stop="openFile(row.path)">{{ t('files.editFile') }}</el-button>
-            <el-button v-else size="small" type="primary" @click.stop="loadDir(row.path, editorVisible)">{{ t('files.openDir') }}</el-button>
+            <el-button v-if="!row.is_dir && isEditableFile(row.name)" size="small" type="primary" @click.stop="openFile(row.path)">{{ t('files.editFile') }}</el-button>
+            <el-button v-else-if="row.is_dir" size="small" type="primary" @click.stop="loadDir(row.path, editorVisible)">{{ t('files.openDir') }}</el-button>
             <el-button size="small" type="danger" @click.stop="deleteEntry(row)">{{ t('common.delete') }}</el-button>
           </div>
         </div>

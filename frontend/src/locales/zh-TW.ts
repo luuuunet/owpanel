@@ -1729,6 +1729,7 @@ export default {
     loadFailed: '加載目錄失敗',
     openFailed: '打開文件失敗',
     isDirectory: '這是目錄，不能作爲文件打開',
+    binaryNotEditable: '二進位文件不可編輯，請使用下載',
     deleteConfirm: '確定刪除 {name}？',
     permUpdated: '權限已更新',
     editFile: '編輯',

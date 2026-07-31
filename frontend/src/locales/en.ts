@@ -1774,6 +1774,7 @@ export default {
     loadFailed: 'Failed to load directory',
     openFailed: 'Failed to open file',
     isDirectory: 'This path is a directory, not a file',
+    binaryNotEditable: 'Binary files cannot be edited — use Download',
     deleteConfirm: 'Delete {name}?',
     permUpdated: 'Permission updated',
     editFile: 'Edit',

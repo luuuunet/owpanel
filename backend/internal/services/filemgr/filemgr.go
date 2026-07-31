@@ -127,7 +127,17 @@ func (s *Service) Read(path string) ([]byte, error) {
 	if info.IsDir() {
 		return nil, fmt.Errorf("cannot read directory as file: %s", p)
 	}
-	return os.ReadFile(p)
+	if IsBinaryFilename(info.Name()) {
+		return nil, fmt.Errorf("binary file cannot be edited as text: %s", info.Name())
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	if LooksLikeBinary(data) {
+		return nil, fmt.Errorf("binary file cannot be edited as text: %s", info.Name())
+	}
+	return data, nil
 }
 
 func (s *Service) Write(path string, content []byte) error {

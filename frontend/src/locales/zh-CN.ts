@@ -1777,6 +1777,7 @@ export default {
     loadFailed: '加载目录失败',
     openFailed: '打开文件失败',
     isDirectory: '这是目录，不能作为文件打开',
+    binaryNotEditable: '二进制文件不可编辑，请使用下载',
     deleteConfirm: '确定删除 {name}？',
     permUpdated: '权限已更新',
     editFile: '编辑',
