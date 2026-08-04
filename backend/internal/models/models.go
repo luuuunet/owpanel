@@ -68,6 +68,8 @@ type Website struct {
 	Remark     string         `gorm:"size:255" json:"remark"`
 	Category   string         `gorm:"size:64;default:default" json:"category"`
 	NginxConf  string         `gorm:"size:512" json:"nginx_conf"`
+	// NginxCustomized: manual nginx edits preserved; auto vhost regen is skipped until cleared.
+	NginxCustomized bool        `gorm:"default:false" json:"nginx_customized"`
 	FtpUser    string         `gorm:"size:64" json:"ftp_user,omitempty"`
 	DbName     string         `gorm:"size:128" json:"db_name,omitempty"`
 	DnsMode        string         `gorm:"size:16;default:manual" json:"dns_mode"`

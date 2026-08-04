@@ -104,6 +104,25 @@ func (s *Service) Update(id uint, req *UpdateRequest) (*models.WordPressSite, er
 	}
 
 	if cdnChanged {
+		if site.CloudflareCDN {
+			// Cloudflare Full (strict) needs a valid origin certificate.
+			if !s.siteSSLEnabled(site) {
+				if err := s.IssueSSLForSite(id, site.SSLEmail); err != nil {
+					return nil, fmt.Errorf("已开启 CDN，但源站 SSL 申请失败（Full Strict 需要）: %w", err)
+				}
+			}
+			_ = s.db.Model(&models.WordPressSite{}).Where("id = ?", id).Updates(map[string]interface{}{
+				"auto_ssl": false, "force_https": false, "ssl": true, "ssl_status": "active",
+			}).Error
+			if site.WebsiteID > 0 {
+				_ = s.db.Model(&models.Website{}).Where("id = ?", site.WebsiteID).Updates(map[string]interface{}{
+					"ssl": true, "force_https": false,
+				}).Error
+			}
+			if fresh, err := s.Get(id); err == nil {
+				site = fresh
+			}
+		}
 		if err := s.applyCDNMode(site); err != nil {
 			return nil, err
 		}

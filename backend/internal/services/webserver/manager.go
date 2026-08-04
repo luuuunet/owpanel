@@ -7,11 +7,15 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/luuuunet/owpanel/internal/models"
 	"github.com/luuuunet/owpanel/internal/services/appstore"
 	"gorm.io/gorm"
 )
+
+// reloadMu serializes nginx/openresty/apache config test+reload across website/WAF/SSL callers.
+var reloadMu sync.Mutex
 
 var webServerKeys = []string{"openresty", "nginx", "apache"}
 
@@ -132,6 +136,8 @@ func (m *Manager) Stop(key string) error {
 }
 
 func (m *Manager) Reload(key string) error {
+	reloadMu.Lock()
+	defer reloadMu.Unlock()
 	if key == "" {
 		key = m.GetActive()
 	}

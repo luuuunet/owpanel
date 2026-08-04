@@ -93,7 +93,9 @@ func (s *Service) AddDomain(siteID uint, domain string) (*models.WordPressDomain
 	if err := s.regenerateVhost(siteID); err != nil {
 		return nil, err
 	}
-	s.reissueSSLAfterDomainChange(site)
+	if err := s.reissueSSLAfterDomainChange(site); err != nil {
+		return &entry, fmt.Errorf("域名已绑定，但更新 SSL 证书失败（可能出现 525）: %w", err)
+	}
 	return &entry, nil
 }
 
@@ -136,24 +138,25 @@ func (s *Service) BindDomains(siteID uint, domains []string) error {
 	}
 	site, _ = s.Get(siteID)
 	if site != nil {
-		s.reissueSSLAfterDomainChange(site)
+		if err := s.reissueSSLAfterDomainChange(site); err != nil {
+			return fmt.Errorf("域名已绑定，但更新 SSL 证书失败（可能出现 525）: %w", err)
+		}
 	}
 	return nil
 }
 
-func (s *Service) reissueSSLAfterDomainChange(site *models.WordPressSite) {
+func (s *Service) reissueSSLAfterDomainChange(site *models.WordPressSite) error {
 	// Skip only when origin SSL is off. If SSL is enabled (incl. CDN + Full Strict),
 	// aliases must be on the origin certificate SAN list.
 	if site == nil || !site.SSL {
-		return
+		return nil
 	}
-	go func(id uint) {
-		if err := s.IssueSSLForSite(id, ""); err != nil {
-			log.Printf("[wordpress] reissue SSL after domain change (site %d): %v", id, err)
-		} else {
-			log.Printf("[wordpress] reissued SSL with alias SANs for site %d", id)
-		}
-	}(site.ID)
+	if err := s.IssueSSLForSite(site.ID, ""); err != nil {
+		log.Printf("[wordpress] reissue SSL after domain change (site %d): %v", site.ID, err)
+		return err
+	}
+	log.Printf("[wordpress] reissued SSL with alias SANs for site %d", site.ID)
+	return nil
 }
 
 func (s *Service) syncWebsiteAlias(site *models.WordPressSite, domain string) error {

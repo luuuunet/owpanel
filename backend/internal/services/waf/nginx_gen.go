@@ -98,11 +98,28 @@ func (s *Service) Apply() (*ApplyResult, error) {
 
 	reloaded := false
 	confInclude := nginxPath(confPath)
-	msg := "配置已写入 " + confInclude + "，请在 nginx http {} 中添加: include " + confInclude + ";"
-	if err := exec.Command("nginx", "-t").Run(); err == nil {
-		if err := exec.Command("nginx", "-s", "reload").Run(); err == nil {
+	msg := "配置已写入 " + confInclude + "，请在 nginx/openresty http {} 中添加: include " + confInclude + ";"
+	for _, bin := range []string{"openresty", "nginx"} {
+		path, err := exec.LookPath(bin)
+		if err != nil {
+			continue
+		}
+		if err := exec.Command(path, "-t").Run(); err != nil {
+			continue
+		}
+		if err := exec.Command(path, "-s", "reload").Run(); err == nil {
 			reloaded = true
-			msg = "Nginx 安全配置已应用并重载"
+			msg = "Web 服务器安全配置已应用并重载 (" + bin + ")"
+			break
+		}
+	}
+	if !reloaded {
+		for _, unit := range []string{"openresty", "nginx"} {
+			if err := exec.Command("systemctl", "reload", unit).Run(); err == nil {
+				reloaded = true
+				msg = "Web 服务器安全配置已应用并重载 (" + unit + ")"
+				break
+			}
 		}
 	}
 

@@ -98,7 +98,7 @@ func (s *Service) AddDomains(siteID uint, text string) ([]models.WebsiteAlias, e
 	if err != nil {
 		return nil, err
 	}
-	if err := s.regenerateVhost(site); err != nil {
+	if err := s.ApplyVhostForced(site); err != nil {
 		return nil, fmt.Errorf("域名已添加，但更新 Nginx 配置失败: %w", err)
 	}
 	if site.DnsMode == "auto" {
@@ -109,9 +109,10 @@ func (s *Service) AddDomains(siteID uint, text string) ([]models.WebsiteAlias, e
 		_ = s.autoDNS(site.Domain, entries, siteID)
 	}
 	// Cloudflare Full (strict) requires origin cert SAN to cover every hostname.
-	// Nginx server_name is updated above; reissue cert so aliases are not 525/526.
 	if site.SSL {
-		s.reissueSSLAfterDomainChange(siteID)
+		if err := s.ReissueSSLWithAliases(siteID); err != nil {
+			return added, fmt.Errorf("域名已添加，但更新 SSL 证书失败（附加域名可能出现 525）: %w", err)
+		}
 	}
 	return added, nil
 }
@@ -189,7 +190,11 @@ func (s *Service) UpdateSite(siteID uint, req *UpdateRequest) (*models.Website, 
 		updates["ssl"] = *req.SSL
 	}
 	if req.ForceHTTPS != nil {
-		updates["force_https"] = *req.ForceHTTPS
+		force := *req.ForceHTTPS
+		if force && s.siteHasProxiedDNS(site) {
+			return nil, fmt.Errorf("该站点 DNS 已开启 Cloudflare 代理（橙云），请关闭 Force HTTPS，否则源站易出现跳转循环或空响应")
+		}
+		updates["force_https"] = force
 	}
 	if req.Remark != nil {
 		updates["remark"] = strings.TrimSpace(*req.Remark)
@@ -283,8 +288,18 @@ func (s *Service) UpdateSite(siteID uint, req *UpdateRequest) (*models.Website, 
 	if err := s.regenerateLimitZones(); err != nil {
 		return nil, err
 	}
-	if err := s.regenerateVhost(site); err != nil {
-		return nil, err
+	// Structural changes must rewrite vhost even if nginx_customized was set.
+	force := req.SSL != nil || req.ForceHTTPS != nil || req.RootPath != nil || req.PhpVersion != nil ||
+		req.ProxyPass != nil || req.RedirectURL != nil || req.RewriteRules != nil ||
+		req.ExtraNginxConf != nil || req.IndexFiles != nil
+	var errApply error
+	if force {
+		errApply = s.ApplyVhostForced(site)
+	} else {
+		errApply = s.regenerateVhost(site)
+	}
+	if errApply != nil {
+		return nil, errApply
 	}
 	return site, nil
 }
@@ -321,11 +336,34 @@ func (s *Service) SaveNginxConf(siteID uint, content string) error {
 		if err != nil {
 			return err
 		}
+		_ = s.db.Model(site).Update("nginx_conf", path).Error
 	}
+	bak := path + ".bak"
+	prev, _ := os.ReadFile(path)
+	_ = os.WriteFile(bak, prev, 0644)
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		return fmt.Errorf("保存配置失败: %w", err)
 	}
-	return s.db.Model(site).Update("nginx_conf", path).Error
+	ws := site.WebServer
+	if ws == "" {
+		ws = s.activeWebServer()
+	}
+	if s.ws != nil && (ws == "nginx" || ws == "openresty" || ws == "") {
+		key := ws
+		if key == "" {
+			key = s.ws.GetActive()
+		}
+		if out, err := s.ws.TestConfig(key); err != nil {
+			_ = os.WriteFile(path, prev, 0644)
+			return fmt.Errorf("nginx -t 失败，已回滚: %v\n%s", err, out)
+		}
+		if err := s.ws.Reload(key); err != nil {
+			return fmt.Errorf("配置已保存但 reload 失败: %w", err)
+		}
+	}
+	return s.db.Model(site).Updates(map[string]interface{}{
+		"nginx_conf": path, "nginx_customized": true,
+	}).Error
 }
 
 func (s *Service) SiteLogs(siteID uint, lines int) (map[string]interface{}, error) {

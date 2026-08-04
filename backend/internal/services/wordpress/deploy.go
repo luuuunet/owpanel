@@ -235,12 +235,22 @@ func (s *Service) runDeploy(site *models.WordPressSite, extras []string, dbOpts 
 		return
 	}
 
-	if site.AutoSSL && !site.CloudflareCDN {
+	// Origin LE cert is still required for Cloudflare Full (strict). CDN mode only
+	// disables origin-side Force HTTPS redirects, not certificate issuance.
+	if site.AutoSSL || site.CloudflareCDN {
 		fresh, err := s.Get(site.ID)
-		if err == nil {
-			logger.Info("正在申请 SSL 证书（Let's Encrypt）…")
+		if err == nil && domainCanUseLetsEncrypt(fresh.Domain) {
+			if fresh.CloudflareCDN {
+				logger.Info("Cloudflare CDN：正在申请源站 SSL（Full Strict 需要）…")
+			} else {
+				logger.Info("正在申请 SSL 证书（Let's Encrypt）…")
+			}
 			if err := s.issueSSL(fresh, logger, fresh.SSLEmail); err != nil {
 				logger.Warn("SSL 申请失败: " + err.Error())
+			} else if fresh.CloudflareCDN {
+				_ = s.db.Model(fresh).Updates(map[string]interface{}{
+					"force_https": false, "ssl": true, "ssl_status": "active",
+				}).Error
 			}
 		}
 	}

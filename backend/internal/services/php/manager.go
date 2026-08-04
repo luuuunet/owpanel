@@ -68,32 +68,34 @@ func PortForVersion(ver string) int {
 }
 
 // FastCGIBackend returns nginx fastcgi_pass target (unix socket on Linux when available).
+// Does not silently fall back to a different PHP version's socket — uses TCP for that version instead.
 func FastCGIBackend(version string) string {
 	version = ResolveVersion(version)
 	if runtime.GOOS == "linux" {
+		// Only version-specific sockets — never fall back to a generic php-fpm.sock
+		// (that often belongs to a different PHP and causes cryptic 502s).
 		candidates := []string{
 			fmt.Sprintf("/run/php/php%s-fpm.sock", version),
-			"/run/php/php-fpm.sock",
 			fmt.Sprintf("/var/run/php/php%s-fpm.sock", version),
-			"/var/run/php/php-fpm.sock",
 		}
 		for _, sock := range candidates {
 			if _, err := os.Stat(sock); err == nil {
 				return "unix:" + sock
 			}
 		}
-		// Last resort: any installed php*-fpm.sock (e.g. site set to 8.3 but only 8.5 installed).
-		if matches, err := filepath.Glob("/run/php/php*-fpm.sock"); err == nil {
-			for _, sock := range matches {
-				base := filepath.Base(sock)
-				if base == "php-fpm.sock" {
-					continue
-				}
-				return "unix:" + sock
-			}
-		}
 	}
 	return fmt.Sprintf("127.0.0.1:%d", PortForVersion(version))
+}
+
+// ApacheProxyFCGI returns an Apache SetHandler proxy:fcgi target for the PHP version.
+// Prefers unix socket (proxy:unix:...|fcgi://localhost/) then TCP fcgi://127.0.0.1:port/.
+func ApacheProxyFCGI(version string) string {
+	backend := FastCGIBackend(version)
+	if strings.HasPrefix(backend, "unix:") {
+		sock := strings.TrimPrefix(backend, "unix:")
+		return fmt.Sprintf("proxy:unix:%s|fcgi://localhost/", sock)
+	}
+	return fmt.Sprintf("proxy:fcgi://%s/", backend)
 }
 
 // DiscoverInstalledVersions lists PHP versions with a local FPM socket or /etc/php tree.

@@ -235,11 +235,29 @@ func reloadNginxIfAvailable() error {
 	if runtime.GOOS == "windows" {
 		return nil
 	}
-	if _, err := exec.LookPath("nginx"); err != nil {
+	// Prefer OpenResty when installed (website stack may use it instead of nginx).
+	bins := []string{"openresty", "nginx"}
+	var lastErr error
+	for _, name := range bins {
+		bin, err := exec.LookPath(name)
+		if err != nil {
+			continue
+		}
+		if out, err := exec.Command(bin, "-t").CombinedOutput(); err != nil {
+			lastErr = fmt.Errorf("%s -t: %v (%s)", name, err, strings.TrimSpace(string(out)))
+			continue
+		}
+		if err := exec.Command(bin, "-s", "reload").Run(); err != nil {
+			lastErr = err
+			continue
+		}
 		return nil
 	}
-	if err := exec.Command("nginx", "-t").Run(); err != nil {
-		return err
+	// systemd unit names used by common installs
+	for _, unit := range []string{"openresty", "nginx"} {
+		if err := exec.Command("systemctl", "reload", unit).Run(); err == nil {
+			return nil
+		}
 	}
-	return exec.Command("nginx", "-s", "reload").Run()
+	return lastErr
 }

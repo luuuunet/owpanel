@@ -157,7 +157,8 @@ func (s *Service) Create(req *CreateRequest) (*CreateResult, error) {
 
 	site.Aliases = s.loadAliases(site.ID)
 	if err := s.applyVhost(&site); err != nil {
-		log.Printf("[website] apply vhost %s: %v", site.Domain, err)
+		_ = s.db.Model(&site).Update("status", "error").Error
+		return nil, fmt.Errorf("网站已创建但虚拟主机配置失败: %w", err)
 	}
 	if refreshed, err := s.Get(site.ID); err == nil {
 		site = *refreshed

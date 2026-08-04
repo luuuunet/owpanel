@@ -288,6 +288,12 @@ server {
 }
 
 func (s *Service) writeVhostOnly(site *models.Website) (string, error) {
+	return s.writeVhostOnlyOpts(site, false)
+}
+
+// writeVhostOnlyOpts writes the generated vhost. When force is false and NginxCustomized
+// is set, the on-disk manual config is preserved (only web_server is returned for reload).
+func (s *Service) writeVhostOnlyOpts(site *models.Website, force bool) (string, error) {
 	if s.isWordPressManaged(site.ID) {
 		ws := site.WebServer
 		if ws == "" {
@@ -298,6 +304,12 @@ func (s *Service) writeVhostOnly(site *models.Website) (string, error) {
 	ws := site.WebServer
 	if ws == "" {
 		ws = s.activeWebServer()
+	}
+	if site.NginxCustomized && !force {
+		log.Printf("[website] skip auto vhost regen for %s (nginx_customized=true); use Apply Nginx or clear customized flag", site.Domain)
+		if path := strings.TrimSpace(site.NginxConf); path != "" {
+			return ws, nil
+		}
 	}
 	var conf string
 	var err error
@@ -311,13 +323,27 @@ func (s *Service) writeVhostOnly(site *models.Website) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := s.db.Model(site).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"nginx_conf": conf,
 		"web_server": ws,
-	}).Error; err != nil {
+	}
+	if force && site.NginxCustomized {
+		updates["nginx_customized"] = false
+		site.NginxCustomized = false
+	}
+	if err := s.db.Model(site).Updates(updates).Error; err != nil {
 		return "", err
 	}
 	return ws, nil
+}
+
+// ApplyVhostForced regenerates vhost even when nginx_customized is set (domains/SSL).
+func (s *Service) ApplyVhostForced(site *models.Website) error {
+	ws, err := s.writeVhostOnlyOpts(site, true)
+	if err != nil {
+		return err
+	}
+	return s.reloadWebServer(ws)
 }
 
 func (s *Service) reloadWebServer(ws string) error {

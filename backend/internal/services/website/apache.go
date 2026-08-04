@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/luuuunet/owpanel/internal/models"
+	"github.com/luuuunet/owpanel/internal/services/php"
 	sslpkg "github.com/luuuunet/owpanel/internal/services/ssl"
 )
 
@@ -111,11 +112,11 @@ func (s *Service) apacheVirtualHost(site *models.Website, root string, port int,
 
 	phpBlock := ""
 	if site.PHP && site.PhpVersion != "" && site.PhpVersion != "static" {
-		fcgiPort := phpPort(site.PhpVersion)
+		handler := php.ApacheProxyFCGI(site.PhpVersion)
 		phpBlock = fmt.Sprintf(`
     <FilesMatch \.php$>
-        SetHandler "proxy:fcgi://127.0.0.1:%d"
-    </FilesMatch>`, fcgiPort)
+        SetHandler "%s"
+    </FilesMatch>`, handler)
 	}
 
 	rewriteBlock := ""

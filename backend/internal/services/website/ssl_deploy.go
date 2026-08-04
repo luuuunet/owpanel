@@ -2,7 +2,6 @@ package website
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/luuuunet/owpanel/internal/models"
@@ -29,7 +28,7 @@ func (s *Service) DeploySSLForDomain(domain string) error {
 	}
 	site.SSL = true
 	site.ForceHTTPS = forceHTTPS
-	return s.applyVhost(&site)
+	return s.ApplyVhostForced(&site)
 }
 
 // siteHasProxiedDNS reports whether this site has any Cloudflare-proxied DNS records.
@@ -150,12 +149,3 @@ func (s *Service) IssueSSL(siteID uint, email string, sanDomains string, deploy 
 	return nil
 }
 
-func (s *Service) reissueSSLAfterDomainChange(siteID uint) {
-	go func() {
-		if err := s.ReissueSSLWithAliases(siteID); err != nil {
-			log.Printf("[website] reissue SSL after domain change (site %d): %v", siteID, err)
-		} else {
-			log.Printf("[website] reissued SSL with alias SANs for site %d", siteID)
-		}
-	}()
-}

@@ -231,7 +231,18 @@ func (s *Service) restoreFromArchive(srcPath string, restoreMaildir bool) error 
 		if err != nil {
 			return err
 		}
-		target := filepath.Join(tmpDir, filepath.FromSlash(hdr.Name))
+		if hdr.Typeflag == tar.TypeSymlink || hdr.Typeflag == tar.TypeLink {
+			continue
+		}
+		cleanName := filepath.Clean(filepath.FromSlash(hdr.Name))
+		if cleanName == ".." || strings.HasPrefix(cleanName, ".."+string(os.PathSeparator)) {
+			return fmt.Errorf("非法备份路径: %s", hdr.Name)
+		}
+		target := filepath.Join(tmpDir, cleanName)
+		rel, err := filepath.Rel(tmpDir, target)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("非法备份路径: %s", hdr.Name)
+		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			_ = os.MkdirAll(target, 0755)
@@ -246,7 +257,7 @@ func (s *Service) restoreFromArchive(srcPath string, restoreMaildir bool) error 
 				return err
 			}
 			out.Close()
-			if hdr.Name == "manifest.json" {
+			if hdr.Name == "manifest.json" || filepath.Base(hdr.Name) == "manifest.json" {
 				data, _ := os.ReadFile(target)
 				_ = json.Unmarshal(data, &manifest)
 			}
