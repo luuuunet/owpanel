@@ -2574,6 +2574,8 @@ export default {
     saveFailed: 'Save failed',
     loadFailed: 'Load failed',
     domainAdded: 'Domain added',
+    domainAddedWithSSL: 'Domain added. If SSL is enabled, aliases are added to the certificate automatically (wait 1–2 minutes for Cloudflare Full strict).',
+    aliasCloudflareHint: 'With Cloudflare: the alias needs a DNS record (orange cloud recommended), and the origin certificate must include that hostname or you will see 525/526.',
     domainRemoved: 'Domain removed',
     batchDelete: 'Delete selected',
     primaryLocked: 'Locked',

@@ -2510,6 +2510,8 @@ export default {
     saveFailed: '保存失敗',
     loadFailed: '加載失敗',
     domainAdded: '域名已添加',
+    domainAddedWithSSL: '域名已添加；若已開啟 SSL，將自動把附加域名寫入證書（Cloudflare 完全嚴格模式需等待約 1～2 分鐘）',
+    aliasCloudflareHint: '使用 Cloudflare 時：附加域名需有 DNS 解析（建議橙色雲代理），且源站證書必須包含該域名，否則會出現 525/526 打不開。',
     domainRemoved: '域名已刪除',
     batchDelete: '請選擇刪除',
     primaryLocked: '不可操作',

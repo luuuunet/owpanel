@@ -2,6 +2,7 @@ package wordpress
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/luuuunet/owpanel/internal/models"
@@ -92,6 +93,7 @@ func (s *Service) AddDomain(siteID uint, domain string) (*models.WordPressDomain
 	if err := s.regenerateVhost(siteID); err != nil {
 		return nil, err
 	}
+	s.reissueSSLAfterDomainChange(site)
 	return &entry, nil
 }
 
@@ -129,7 +131,27 @@ func (s *Service) BindDomains(siteID uint, domains []string) error {
 		}
 		_ = s.syncWebsiteAlias(site, d)
 	}
-	return s.regenerateVhost(siteID)
+	if err := s.regenerateVhost(siteID); err != nil {
+		return err
+	}
+	site, _ = s.Get(siteID)
+	if site != nil {
+		s.reissueSSLAfterDomainChange(site)
+	}
+	return nil
+}
+
+func (s *Service) reissueSSLAfterDomainChange(site *models.WordPressSite) {
+	if site == nil || site.CloudflareCDN || !site.SSL {
+		return
+	}
+	go func(id uint) {
+		if err := s.IssueSSLForSite(id, ""); err != nil {
+			log.Printf("[wordpress] reissue SSL after domain change (site %d): %v", id, err)
+		} else {
+			log.Printf("[wordpress] reissued SSL with alias SANs for site %d", id)
+		}
+	}(site.ID)
 }
 
 func (s *Service) syncWebsiteAlias(site *models.WordPressSite, domain string) error {

@@ -597,7 +597,12 @@ func (s *Service) AutoDNSForWebsite(primary string, aliases []string, websiteID 
 	ip := s.ServerIP()
 	hosts := []string{primary}
 	hosts = append(hosts, aliases...)
-	_, err := s.ApplyRecords(ApplyDNSRequest{Hosts: hosts, IP: ip, WebsiteID: websiteID})
+	proxied := false
+	if acc, err := s.defaultAccount(); err == nil && strings.EqualFold(acc.Provider, "cloudflare") {
+		// Orange-cloud by default so HTTPS works at Cloudflare edge for new aliases.
+		proxied = true
+	}
+	_, err := s.ApplyRecords(ApplyDNSRequest{Hosts: hosts, IP: ip, WebsiteID: websiteID, Proxied: proxied})
 	return err
 }
 

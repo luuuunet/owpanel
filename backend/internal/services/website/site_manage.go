@@ -109,6 +109,11 @@ func (s *Service) AddDomains(siteID uint, text string) ([]models.WebsiteAlias, e
 		}
 		_ = s.autoDNS(site.Domain, entries, siteID)
 	}
+	// Cloudflare Full (strict) requires origin cert SAN to cover every hostname.
+	// Nginx server_name is updated above; reissue cert so aliases are not 525/526.
+	if site.SSL {
+		s.reissueSSLAfterDomainChange(siteID)
+	}
 	return added, nil
 }
 

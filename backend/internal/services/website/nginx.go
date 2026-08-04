@@ -65,6 +65,8 @@ func (s *Service) writeNginxVhost(site *models.Website) (string, error) {
 func (s *Service) httpRedirectBlock(site *models.Website, hosts []string) string {
 	names := strings.Join(hosts, " ")
 	root := filepath.ToSlash(site.RootPath)
+	// Skip blind HTTPS redirects when request already came via Cloudflare / reverse proxy HTTPS.
+	// Avoids redirect loops with Cloudflare Flexible SSL.
 	return fmt.Sprintf(`server {
     listen 80;
     server_name %s;
@@ -73,7 +75,16 @@ func (s *Service) httpRedirectBlock(site *models.Website, hosts []string) string
         allow all;
     }
     location / {
-        return 301 https://$host$request_uri;
+        set $require_https 1;
+        if ($http_cf_ray != "") {
+            set $require_https 0;
+        }
+        if ($http_x_forwarded_proto = "https") {
+            set $require_https 0;
+        }
+        if ($require_https = 1) {
+            return 301 https://$host$request_uri;
+        }
     }
 }`, names, root)
 }

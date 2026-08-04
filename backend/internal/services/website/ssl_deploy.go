@@ -2,6 +2,7 @@ package website
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/luuuunet/owpanel/internal/models"
@@ -29,10 +30,82 @@ func (s *Service) DeploySSLForDomain(domain string) error {
 	return s.applyVhost(&site)
 }
 
+// collectSANDomains returns all non-primary bound aliases for certificate SAN coverage.
+func (s *Service) collectSANDomains(site *models.Website) string {
+	if site == nil {
+		return ""
+	}
+	if len(site.Aliases) == 0 {
+		s.db.Where("website_id = ?", site.ID).Find(&site.Aliases)
+	}
+	seen := map[string]bool{strings.ToLower(site.Domain): true}
+	var extras []string
+	for _, a := range site.Aliases {
+		host := strings.TrimSpace(strings.ToLower(a.Domain))
+		if host == "" || seen[host] || a.Type == "primary" {
+			continue
+		}
+		seen[host] = true
+		extras = append(extras, host)
+	}
+	return strings.Join(extras, ",")
+}
+
+func mergeSANLists(manual, auto string) string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(raw string) {
+		for _, part := range strings.FieldsFunc(raw, func(r rune) bool {
+			return r == ',' || r == ';' || r == ' ' || r == '\n' || r == '\t'
+		}) {
+			h := strings.TrimSpace(strings.ToLower(part))
+			if h == "" || seen[h] {
+				continue
+			}
+			seen[h] = true
+			out = append(out, h)
+		}
+	}
+	add(manual)
+	add(auto)
+	return strings.Join(out, ",")
+}
+
+func (s *Service) certEmailForSite(site *models.Website) string {
+	var cert models.SSLCertificate
+	if err := s.db.Where("domain = ? AND status = ?", site.Domain, "active").Order("id desc").First(&cert).Error; err == nil {
+		if e := strings.TrimSpace(cert.Email); e != "" {
+			return e
+		}
+	}
+	if err := s.db.Where("domain = ?", site.Domain).Order("id desc").First(&cert).Error; err == nil {
+		return strings.TrimSpace(cert.Email)
+	}
+	return ""
+}
+
+// ReissueSSLWithAliases re-issues the site certificate including all bound aliases as SANs.
+// Needed after adding domains behind Cloudflare Full (strict), otherwise origin TLS fails (525/526).
+func (s *Service) ReissueSSLWithAliases(siteID uint) error {
+	site, err := s.Get(siteID)
+	if err != nil {
+		return err
+	}
+	if !site.SSL {
+		return nil
+	}
+	email := s.certEmailForSite(site)
+	return s.IssueSSL(siteID, email, s.collectSANDomains(site), true)
+}
+
 func (s *Service) IssueSSL(siteID uint, email string, sanDomains string, deploy bool) error {
 	site, err := s.Get(siteID)
 	if err != nil {
 		return err
+	}
+	sanDomains = mergeSANLists(sanDomains, s.collectSANDomains(site))
+	if email == "" {
+		email = s.certEmailForSite(site)
 	}
 	autoRenew := true
 	sslSvc := ssl.NewService(s.db, s.dataDir)
@@ -59,4 +132,14 @@ func (s *Service) IssueSSL(siteID uint, email string, sanDomains string, deploy 
 		return s.applyVhost(site)
 	}
 	return nil
+}
+
+func (s *Service) reissueSSLAfterDomainChange(siteID uint) {
+	go func() {
+		if err := s.ReissueSSLWithAliases(siteID); err != nil {
+			log.Printf("[website] reissue SSL after domain change (site %d): %v", siteID, err)
+		} else {
+			log.Printf("[website] reissued SSL with alias SANs for site %d", siteID)
+		}
+	}()
 }

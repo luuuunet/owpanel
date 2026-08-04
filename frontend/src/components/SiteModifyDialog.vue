@@ -218,7 +218,7 @@ async function handleAddDomains() {
       return
     }
     await api.post(`/websites/${props.siteId}/domains`, { domains_text: domainsText.value })
-    ElMessage.success(t('siteModify.domainAdded'))
+    ElMessage.success(t('siteModify.domainAddedWithSSL'))
     domainsText.value = ''
     await refreshDomains()
     emit('updated')
@@ -555,6 +555,7 @@ async function issueSSL() {
             :rows="6"
             :placeholder="`${t('websites.domainHint')}\n${t('websites.domainWildcard')}\n${t('websites.domainPort')}`"
           />
+          <p class="hint-text">{{ t('siteModify.aliasCloudflareHint') }}</p>
           <div class="panel-actions">
             <el-button type="primary" @click="handleAddDomains">{{ t('siteModify.add') }}</el-button>
           </div>
@@ -1112,6 +1113,12 @@ async function issueSSL() {
 }
 .hint-inline {
   margin-bottom: 8px;
+}
+.hint-text {
+  margin: 8px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .path-bar {
   margin-bottom: 12px;
