@@ -2,11 +2,13 @@ package website
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/luuuunet/owpanel/internal/models"
+	sslpkg "github.com/luuuunet/owpanel/internal/services/ssl"
 )
 
 func (s *Service) writeApacheVhost(site *models.Website) (string, error) {
@@ -24,13 +26,39 @@ func (s *Service) writeApacheVhost(site *models.Website) (string, error) {
 	}
 	groups := groupByPort(entries)
 
+	certOK := false
+	if site.SSL {
+		_, _, certOK = sslpkg.CertPaths(s.dataDir, site.Domain)
+		if !certOK {
+			log.Printf("[website] SSL enabled for %s but certificate files missing; generating HTTP-only Apache vhost", site.Domain)
+		}
+	}
+	forceHTTPS := site.SSL && site.ForceHTTPS && certOK
+
 	var blocks []string
 	for port, hosts := range groups {
-		block, err := s.apacheVirtualHost(site, root, port, hosts)
+		block, err := s.apacheVirtualHost(site, root, port, hosts, false, "", "", forceHTTPS)
 		if err != nil {
 			return "", err
 		}
 		blocks = append(blocks, block)
+	}
+	if site.SSL && certOK {
+		fullchain, privkey, ok := sslpkg.CertPaths(s.dataDir, site.Domain)
+		if ok {
+			var hosts []string
+			for _, e := range entries {
+				hosts = append(hosts, e.Host)
+			}
+			if len(hosts) == 0 {
+				hosts = []string{site.Domain}
+			}
+			sslBlock, err := s.apacheVirtualHost(site, root, 443, hosts, true, filepath.ToSlash(fullchain), filepath.ToSlash(privkey), false)
+			if err != nil {
+				return "", err
+			}
+			blocks = append(blocks, sslBlock)
+		}
 	}
 	content := fmt.Sprintf("# OWPanel — %s\n%s\n", site.Domain, strings.Join(blocks, "\n"))
 	if err := os.WriteFile(confPath, []byte(content), 0644); err != nil {
@@ -39,7 +67,18 @@ func (s *Service) writeApacheVhost(site *models.Website) (string, error) {
 	return confPath, nil
 }
 
-func (s *Service) apacheVirtualHost(site *models.Website, root string, port int, hosts []string) (string, error) {
+func apacheServerNames(hosts []string) (serverName, serverAlias string) {
+	if len(hosts) == 0 {
+		return "", ""
+	}
+	serverName = hosts[0]
+	if len(hosts) > 1 {
+		serverAlias = strings.Join(hosts[1:], " ")
+	}
+	return serverName, serverAlias
+}
+
+func (s *Service) apacheVirtualHost(site *models.Website, root string, port int, hosts []string, ssl bool, fullchain, privkey string, forceHTTPS bool) (string, error) {
 	if site.Status == "stopped" {
 		return fmt.Sprintf(`# Site stopped: %s
 <VirtualHost *:%d>
@@ -49,9 +88,18 @@ func (s *Service) apacheVirtualHost(site *models.Website, root string, port int,
 </VirtualHost>`, site.Domain, port, site.Domain, root), nil
 	}
 
-	names := strings.Join(hosts, " ")
-	accessLog := filepath.ToSlash(filepath.Join(s.dataDir, "logs", site.Domain+"_access.log"))
-	errorLog := filepath.ToSlash(filepath.Join(s.dataDir, "logs", site.Domain+"_error.log"))
+	serverName, serverAlias := apacheServerNames(hosts)
+	aliasLine := ""
+	if serverAlias != "" {
+		aliasLine = fmt.Sprintf("\n    ServerAlias %s", serverAlias)
+	}
+
+	logSuffix := ""
+	if ssl {
+		logSuffix = "_ssl"
+	}
+	accessLog := filepath.ToSlash(filepath.Join(s.dataDir, "logs", site.Domain+logSuffix+"_access.log"))
+	errorLog := filepath.ToSlash(filepath.Join(s.dataDir, "logs", site.Domain+logSuffix+"_error.log"))
 
 	indexLine := strings.TrimSpace(site.IndexFiles)
 	if indexLine == "" {
@@ -75,6 +123,15 @@ func (s *Service) apacheVirtualHost(site *models.Website, root string, port int,
 		rewriteBlock = "\n    " + strings.ReplaceAll(rules, "\n", "\n    ") + "\n"
 	}
 
+	// Cloudflare-aware HTTP→HTTPS (skip when already proxied as HTTPS).
+	if forceHTTPS && !ssl {
+		rewriteBlock += `
+    RewriteEngine On
+    RewriteCond %{HTTP:CF-Ray} ^$
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]`
+	}
+
 	crossSiteBlock := ""
 	if site.CrossSiteProtectEnabled {
 		crossSiteBlock = `
@@ -94,19 +151,27 @@ func (s *Service) apacheVirtualHost(site *models.Website, root string, port int,
     RedirectMatch 301 ^/(.*)$ %s`, redirect)
 	}
 
+	sslBlock := ""
+	if ssl {
+		sslBlock = fmt.Sprintf(`
+    SSLEngine on
+    SSLCertificateFile "%s"
+    SSLCertificateKeyFile "%s"`, fullchain, privkey)
+	}
+
 	return fmt.Sprintf(`<VirtualHost *:%d>
-    ServerName %s
+    ServerName %s%s
     DocumentRoot "%s"
     DirectoryIndex %s
     ErrorLog "%s"
-    CustomLog "%s" combined
+    CustomLog "%s" combined%s
 %s%s%s%s
     <Directory "%s">
         Options Indexes FollowSymLinks
         AllowOverride All
         Require all granted
     </Directory>
-</VirtualHost>`, port, names, root, indexLine, errorLog, accessLog, rewriteBlock, crossSiteBlock, proxyBlock, phpBlock, root), nil
+</VirtualHost>`, port, serverName, aliasLine, root, indexLine, errorLog, accessLog, sslBlock, rewriteBlock, crossSiteBlock, proxyBlock, phpBlock, root), nil
 }
 
 func (s *Service) removeApacheVhost(domain string) {

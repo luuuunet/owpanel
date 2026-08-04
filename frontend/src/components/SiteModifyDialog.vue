@@ -511,8 +511,7 @@ async function issueSSL() {
       deploy: true,
     })
     ElMessage.success(t('siteModify.sslIssued'))
-    settings.value.ssl = true
-    settings.value.force_https = true
+    // Reload from server — do not hardcode force_https (Cloudflare proxied sites keep it off).
     await loadSite(props.siteId)
     emit('updated')
   } catch (e: any) {

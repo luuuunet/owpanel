@@ -20,14 +20,30 @@ func (s *Service) DeploySSLForDomain(domain string) error {
 		return fmt.Errorf("证书文件不存在: %s", domain)
 	}
 	_ = fc
+	// Behind Cloudflare orange-cloud, Forced HTTPS on origin causes Flexible loops / empty HTTP.
+	forceHTTPS := !s.siteHasProxiedDNS(&site)
 	if err := s.db.Model(&site).Updates(map[string]interface{}{
-		"ssl": true, "force_https": true,
+		"ssl": true, "force_https": forceHTTPS,
 	}).Error; err != nil {
 		return err
 	}
 	site.SSL = true
-	site.ForceHTTPS = true
+	site.ForceHTTPS = forceHTTPS
 	return s.applyVhost(&site)
+}
+
+// siteHasProxiedDNS reports whether this site has any Cloudflare-proxied DNS records.
+func (s *Service) siteHasProxiedDNS(site *models.Website) bool {
+	if site == nil || site.ID == 0 || s.db == nil {
+		return false
+	}
+	var n int64
+	if err := s.db.Model(&models.DNSRecord{}).
+		Where("website_id = ? AND proxied = ?", site.ID, true).
+		Count(&n).Error; err != nil {
+		return false
+	}
+	return n > 0
 }
 
 // collectSANDomains returns all non-primary bound aliases for certificate SAN coverage.

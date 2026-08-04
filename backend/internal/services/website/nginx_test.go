@@ -17,7 +17,7 @@ func TestRenderServerBlockAccessLogPaths(t *testing.T) {
 		PhpVersion: "8.4",
 	}
 	features := &nginxFeatureBlocks{}
-	block, err := s.renderServerBlock(site, site.RootPath, 80, []string{site.Domain}, sslOpts{}, features)
+	block, err := s.renderServerBlock(site, site.RootPath, 80, []string{site.Domain}, sslOpts{}, features, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,5 +34,43 @@ func TestRenderServerBlockAccessLogPaths(t *testing.T) {
 	}
 	if !strings.Contains(block, "error_log "+wantError+";") {
 		t.Fatalf("missing error log path, got:\n%s", block)
+	}
+}
+
+func TestForceHTTPSKeepsTryFilesBehindCloudflare(t *testing.T) {
+	s := &Service{dataDir: "/opt/owpanel/data"}
+	site := &models.Website{
+		Domain:     "example.com",
+		RootPath:   "/opt/owpanel/data/wwwroot/example.com/public",
+		Port:       80,
+		PHP:        true,
+		PhpVersion: "8.4",
+		SSL:        true,
+		ForceHTTPS: true,
+	}
+	features := &nginxFeatureBlocks{}
+	block, err := s.renderServerBlock(site, site.RootPath, 80, []string{site.Domain}, sslOpts{}, features, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"$http_cf_ray",
+		"try_files",
+		"/.well-known/acme-challenge/",
+		"return 301 https://$host$request_uri",
+	} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("missing %q in force-HTTPS HTTP block:\n%s", want, block)
+		}
+	}
+}
+
+func TestApacheServerNames(t *testing.T) {
+	name, alias := apacheServerNames([]string{"a.com", "www.a.com", "b.a.com"})
+	if name != "a.com" {
+		t.Fatalf("ServerName=%q", name)
+	}
+	if alias != "www.a.com b.a.com" {
+		t.Fatalf("ServerAlias=%q", alias)
 	}
 }

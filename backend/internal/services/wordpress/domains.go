@@ -142,7 +142,9 @@ func (s *Service) BindDomains(siteID uint, domains []string) error {
 }
 
 func (s *Service) reissueSSLAfterDomainChange(site *models.WordPressSite) {
-	if site == nil || site.CloudflareCDN || !site.SSL {
+	// Skip only when origin SSL is off. If SSL is enabled (incl. CDN + Full Strict),
+	// aliases must be on the origin certificate SAN list.
+	if site == nil || !site.SSL {
 		return
 	}
 	go func(id uint) {

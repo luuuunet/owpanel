@@ -2,7 +2,6 @@ package website
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,7 +99,7 @@ func (s *Service) AddDomains(siteID uint, text string) ([]models.WebsiteAlias, e
 		return nil, err
 	}
 	if err := s.regenerateVhost(site); err != nil {
-		log.Printf("[website] regenerate vhost after add domains: %v", err)
+		return nil, fmt.Errorf("域名已添加，但更新 Nginx 配置失败: %w", err)
 	}
 	if site.DnsMode == "auto" {
 		var entries []domainEntry

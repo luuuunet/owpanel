@@ -292,7 +292,12 @@ func (s *Server) handleImportDatabase(c *gin.Context) {
 
 	tmpDir := filepath.Join(os.TempDir(), "owpanel-db-import")
 	_ = os.MkdirAll(tmpDir, 0755)
-	tmpPath := filepath.Join(tmpDir, fmt.Sprintf("%d-%s", time.Now().UnixNano(), header.Filename))
+	safeName := filepath.Base(header.Filename)
+	if safeName == "" || safeName == "." || safeName == ".." {
+		response.Error(c, 400, "无效的文件名")
+		return
+	}
+	tmpPath := filepath.Join(tmpDir, fmt.Sprintf("%d-%s", time.Now().UnixNano(), safeName))
 	out, err := os.Create(tmpPath)
 	if err != nil {
 		response.Error(c, 500, err.Error())

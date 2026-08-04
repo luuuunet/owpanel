@@ -2,6 +2,7 @@ package website
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,19 +37,27 @@ func (s *Service) writeNginxVhost(site *models.Website) (string, error) {
 	}
 	groups := groupByPort(entries)
 
+	certOK := false
+	if site.SSL {
+		_, _, certOK = sslpkg.CertPaths(s.dataDir, site.Domain)
+		if !certOK {
+			log.Printf("[website] SSL enabled for %s but certificate files missing; generating HTTP-only vhost", site.Domain)
+		}
+	}
+	// Effective force-HTTPS only when we actually have a cert to redirect to.
+	forceHTTPS := site.SSL && site.ForceHTTPS && certOK
+
 	var blocks []string
 	for port, hosts := range groups {
-		if site.SSL && site.ForceHTTPS && port == 80 {
-			blocks = append(blocks, s.httpRedirectBlock(site, hosts))
-			continue
-		}
-		block, err := s.renderServerBlock(site, root, port, hosts, sslOpts{}, features)
+		// Always render a full HTTP server (root/php/try_files). Force HTTPS is
+		// applied inside location / with Cloudflare-aware skip — never an empty redirect block.
+		block, err := s.renderServerBlock(site, root, port, hosts, sslOpts{}, features, forceHTTPS)
 		if err != nil {
 			return "", err
 		}
 		blocks = append(blocks, block)
 	}
-	if site.SSL {
+	if site.SSL && certOK {
 		if sslBlock := s.sslServerBlock(site, root, site.Domain, features); sslBlock != "" {
 			blocks = append(blocks, sslBlock)
 		}
@@ -62,34 +71,7 @@ func (s *Service) writeNginxVhost(site *models.Website) (string, error) {
 	return confPath, nil
 }
 
-func (s *Service) httpRedirectBlock(site *models.Website, hosts []string) string {
-	names := strings.Join(hosts, " ")
-	root := filepath.ToSlash(site.RootPath)
-	// Skip blind HTTPS redirects when request already came via Cloudflare / reverse proxy HTTPS.
-	// Avoids redirect loops with Cloudflare Flexible SSL.
-	return fmt.Sprintf(`server {
-    listen 80;
-    server_name %s;
-    location ^~ /.well-known/acme-challenge/ {
-        root %s;
-        allow all;
-    }
-    location / {
-        set $require_https 1;
-        if ($http_cf_ray != "") {
-            set $require_https 0;
-        }
-        if ($http_x_forwarded_proto = "https") {
-            set $require_https 0;
-        }
-        if ($require_https = 1) {
-            return 301 https://$host$request_uri;
-        }
-    }
-}`, names, root)
-}
-
-func (s *Service) renderServerBlock(site *models.Website, root string, port int, hosts []string, ssl sslOpts, features *nginxFeatureBlocks) (string, error) {
+func (s *Service) renderServerBlock(site *models.Website, root string, port int, hosts []string, ssl sslOpts, features *nginxFeatureBlocks, forceHTTPS bool) (string, error) {
 	names := strings.Join(hosts, " ")
 	logSuffix := ""
 	if ssl.enabled {
@@ -147,9 +129,20 @@ func (s *Service) renderServerBlock(site *models.Website, root string, port int,
 		edgeWorkerBlock = s.edgeWorker.ServerBlockDirectives(site)
 	}
 
-	locationBlock := s.mainLocationBlock(site, tryFallback, cacheProxy, cacheRoot)
+	// Force HTTPS redirect only on HTTP blocks; skip when already behind CF/proxy HTTPS.
+	wantForceHTTPS := forceHTTPS && !ssl.enabled
+	locationBlock := s.mainLocationBlock(site, tryFallback, cacheProxy, cacheRoot, wantForceHTTPS)
 	if rewriteRulesDefineRootLocation(site.RewriteRules) {
 		locationBlock = ""
+	}
+
+	acmeBlock := ""
+	if !ssl.enabled {
+		acmeBlock = fmt.Sprintf(`
+    location ^~ /.well-known/acme-challenge/ {
+        root %s;
+        allow all;
+    }`, root)
 	}
 
 	listenLine := fmt.Sprintf("listen %d;", port)
@@ -166,14 +159,14 @@ func (s *Service) renderServerBlock(site *models.Website, root string, port int,
     server_name %s;
     root %s;
     %s;
-%s%s%s%s%s
+%s%s%s%s%s%s
     access_log %s;
     error_log %s;%s%s
 %s%s%s%s%s%s%s%s
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?|webp|avif|mp4|webm|pdf|zip|bmp)$ {
         access_log off;%s%s
     }
-}`, listenLine, names, root, indexLine, sslLines, features.access, features.geo, features.bots, features.traffic,
+}`, listenLine, names, root, indexLine, sslLines, features.access, features.geo, features.bots, features.traffic, acmeBlock,
 		accessLog, errorLog, cacheAccessLog, features.crossSite, cacheServer, rewriteBlock, extraBlock, features.subdirs, cacheRuleLocs, edgeWorkerBlock, locationBlock, phpBlock, cacheStatic, features.staticEx), nil
 }
 
@@ -197,10 +190,30 @@ func (s *Service) indexConfig(site *models.Website) (indexLine, tryFallback stri
 	return indexLine, tryFallback
 }
 
-func (s *Service) mainLocationBlock(site *models.Website, tryFallback, cacheProxy, cacheRoot string) string {
+// cfAwareHTTPSRedirect returns nginx directives that 301 to HTTPS unless the
+// request already arrived via Cloudflare / reverse-proxy HTTPS.
+func cfAwareHTTPSRedirect() string {
+	return `
+        set $require_https 1;
+        if ($http_cf_ray != "") {
+            set $require_https 0;
+        }
+        if ($http_x_forwarded_proto = "https") {
+            set $require_https 0;
+        }
+        if ($require_https = 1) {
+            return 301 https://$host$request_uri;
+        }`
+}
+
+func (s *Service) mainLocationBlock(site *models.Website, tryFallback, cacheProxy, cacheRoot string, forceHTTPS bool) string {
+	httpsGate := ""
+	if forceHTTPS {
+		httpsGate = cfAwareHTTPSRedirect()
+	}
 	if proxy := strings.TrimSpace(site.ProxyPass); proxy != "" {
 		return fmt.Sprintf(`
-    location / {
+    location / {%s
         proxy_pass %s;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -209,18 +222,18 @@ func (s *Service) mainLocationBlock(site *models.Website, tryFallback, cacheProx
         proxy_buffer_size 128k;
         proxy_buffers 8 256k;
         proxy_busy_buffers_size 256k;%s
-    }`, proxy, cacheProxy)
+    }`, httpsGate, proxy, cacheProxy)
 	}
 	if redirect := strings.TrimSpace(site.RedirectURL); redirect != "" {
 		return fmt.Sprintf(`
-    location / {
+    location / {%s
         return 301 %s;
-    }`, redirect)
+    }`, httpsGate, redirect)
 	}
 	return fmt.Sprintf(`
-    location / {
+    location / {%s
         try_files $uri $uri/ %s;%s
-    }`, tryFallback, cacheRoot)
+    }`, httpsGate, tryFallback, cacheRoot)
 }
 
 func (s *Service) sslServerBlock(site *models.Website, root, primary string, features *nginxFeatureBlocks) string {
@@ -241,7 +254,7 @@ func (s *Service) sslServerBlock(site *models.Website, root, primary string, fea
 	}
 	block, err := s.renderServerBlock(site, root, 443, strings.Fields(names), sslOpts{
 		enabled: true, fullchain: fullchain, privkey: privkey,
-	}, features)
+	}, features, false)
 	if err != nil {
 		return ""
 	}
