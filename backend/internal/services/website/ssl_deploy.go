@@ -31,6 +31,22 @@ func (s *Service) DeploySSLForDomain(domain string) error {
 	return s.ApplyVhostForced(&site)
 }
 
+// DisableForceHTTPSForProxied turns off origin Force HTTPS when DNS is orange-clouded.
+func (s *Service) DisableForceHTTPSForProxied(siteID uint) error {
+	site, err := s.Get(siteID)
+	if err != nil {
+		return err
+	}
+	if !site.ForceHTTPS {
+		return nil
+	}
+	if err := s.db.Model(site).Update("force_https", false).Error; err != nil {
+		return err
+	}
+	site.ForceHTTPS = false
+	return s.ApplyVhostForced(site)
+}
+
 // siteHasProxiedDNS reports whether this site has any Cloudflare-proxied DNS records.
 func (s *Service) siteHasProxiedDNS(site *models.Website) bool {
 	if site == nil || site.ID == 0 || s.db == nil {

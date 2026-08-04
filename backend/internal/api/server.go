@@ -1405,9 +1405,11 @@ func (s *Server) handleDeleteUser(c *gin.Context) {
 }
 
 func parseID(c *gin.Context) uint {
-	var id uint
-	fmt.Sscanf(c.Param("id"), "%d", &id)
-	return id
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		return 0
+	}
+	return uint(id)
 }
 
 func parseParamID(c *gin.Context, name string) uint {

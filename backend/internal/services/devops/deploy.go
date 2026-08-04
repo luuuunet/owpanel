@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -288,8 +289,10 @@ func (s *Service) HandleCIWebhook(token string, req CIRequest, body []byte, gitl
 	if err := s.db.Where("webhook_token = ? AND enabled = ?", token, true).First(&cfg).Error; err != nil {
 		return nil, fmt.Errorf("无效的 CI 端点")
 	}
-	if cfg.WebhookSecret != "" && gitlabToken != "" && cfg.WebhookSecret != gitlabToken {
-		return nil, fmt.Errorf("GitLab Token 校验失败")
+	if secret := strings.TrimSpace(cfg.WebhookSecret); secret != "" {
+		if subtle.ConstantTimeCompare([]byte(gitlabToken), []byte(secret)) != 1 {
+			return nil, fmt.Errorf("GitLab Token 校验失败")
+		}
 	}
 	branch := strings.TrimSpace(req.Branch)
 	if branch == "" && req.Ref != "" {

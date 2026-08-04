@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/luuuunet/owpanel/internal/models"
@@ -495,6 +496,10 @@ func dirEmpty(path string) (bool, error) {
 }
 
 func (s *Service) downloadWordPress(root, version string) error {
+	version = strings.TrimSpace(version)
+	if matched, _ := regexp.MatchString(`^\d+\.\d+(\.\d+)?$`, version); !matched {
+		return fmt.Errorf("无效的 WordPress 版本: %s", version)
+	}
 	url := fmt.Sprintf("https://wordpress.org/wordpress-%s.zip", version)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -522,13 +527,25 @@ func (s *Service) downloadWordPress(root, version string) error {
 	}
 	defer r.Close()
 
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
 	prefix := "wordpress/"
 	for _, zf := range r.File {
 		name := strings.TrimPrefix(zf.Name, prefix)
 		if name == "" {
 			continue
 		}
-		target := filepath.Join(root, filepath.FromSlash(name))
+		cleanName := filepath.Clean(filepath.FromSlash(name))
+		if cleanName == ".." || strings.HasPrefix(cleanName, ".."+string(os.PathSeparator)) {
+			return fmt.Errorf("非法归档路径: %s", zf.Name)
+		}
+		target := filepath.Join(rootAbs, cleanName)
+		rel, err := filepath.Rel(rootAbs, target)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("非法归档路径: %s", zf.Name)
+		}
 		if zf.FileInfo().IsDir() {
 			_ = os.MkdirAll(target, 0755)
 			continue

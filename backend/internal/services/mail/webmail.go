@@ -461,7 +461,13 @@ func extractSnappyMailArchive(src, destDir string) error {
 		if name == "" || name == "." {
 			continue
 		}
-		target := filepath.Join(destDir, filepath.FromSlash(name))
+		if e.typ == tar.TypeSymlink || e.typ == tar.TypeLink {
+			continue
+		}
+		target, err := safeExtractPath(destDir, name)
+		if err != nil {
+			return err
+		}
 		switch e.typ {
 		case tar.TypeDir:
 			_ = os.MkdirAll(target, 0755)
@@ -513,7 +519,13 @@ func extractTarGzToDir(src, destDir string) error {
 		if name == "" || name == "." {
 			continue
 		}
-		target := filepath.Join(destDir, filepath.FromSlash(name))
+		if hdr.Typeflag == tar.TypeSymlink || hdr.Typeflag == tar.TypeLink {
+			continue
+		}
+		target, err := safeExtractPath(destDir, name)
+		if err != nil {
+			return err
+		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			_ = os.MkdirAll(target, 0755)
@@ -531,6 +543,19 @@ func extractTarGzToDir(src, destDir string) error {
 		}
 	}
 	return nil
+}
+
+func safeExtractPath(destDir, name string) (string, error) {
+	cleanName := filepath.Clean(filepath.FromSlash(name))
+	if cleanName == ".." || strings.HasPrefix(cleanName, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("非法归档路径: %s", name)
+	}
+	target := filepath.Join(destDir, cleanName)
+	rel, err := filepath.Rel(destDir, target)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("非法归档路径: %s", name)
+	}
+	return target, nil
 }
 
 func (s *Service) writeSnappyMailDomainConfigs(primaryDomain string) error {
@@ -724,18 +749,18 @@ func webmailServerBlock(host, root, fcgi string, _ bool) string {
 
 func (s *Service) detectWebmailPHP() (string, error) {
 	mgr := php.NewManager(s.dataDir)
-	for _, key := range []string{"php83", "php82", "php81", "php74"} {
+	for _, key := range []string{"php85", "php84", "php83", "php82", "php81", "php74"} {
 		st := mgr.Status(key)
 		if st.Binary != "" {
 			return st.Binary, nil
 		}
 	}
-	for _, name := range []string{"php", "php8.3", "php83", "php8.2", "php82", "php8.1", "php81", "php7.4", "php74"} {
+	for _, name := range []string{"php", "php8.5", "php85", "php8.4", "php84", "php8.3", "php83", "php8.2", "php82", "php8.1", "php81", "php7.4", "php74"} {
 		if path, err := exec.LookPath(name); err == nil {
 			return path, nil
 		}
 	}
-	for _, ver := range []string{"83", "82", "81", "74"} {
+	for _, ver := range []string{"85", "84", "83", "82", "81", "74"} {
 		for _, rel := range []string{
 			filepath.Join("server", "php", ver, "bin", "php"),
 			filepath.Join("server", "php"+ver, "bin", "php"),
@@ -752,7 +777,7 @@ func (s *Service) detectWebmailPHP() (string, error) {
 
 func (s *Service) ensureWebmailPhpFpmBackend(log func(string, ...interface{})) (string, error) {
 	mgr := php.NewManager(s.dataDir)
-	keys := []string{"php83", "php82", "php81", "php74"}
+	keys := []string{"php85", "php84", "php83", "php82", "php81", "php74"}
 
 	for _, key := range keys {
 		st := mgr.Status(key)

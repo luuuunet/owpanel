@@ -35,6 +35,11 @@ func authenticate(c *gin.Context, authSvc *auth.Service, allowQueryToken bool) b
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 		return false
 	}
+	// Temp tokens issued during 2FA login must not access the panel API.
+	if claims.TotpPending {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "TOTP verification required"})
+		return false
+	}
 
 	c.Set("user_id", claims.UserID)
 	c.Set("username", claims.Username)

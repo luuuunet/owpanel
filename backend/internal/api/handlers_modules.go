@@ -763,6 +763,12 @@ func (s *Server) handleGetSettings(c *gin.Context) {
 	} else {
 		data["hf_token_set"] = "false"
 	}
+	if data["cluster_agent_token"] != "" {
+		data["cluster_agent_token_set"] = "true"
+		data["cluster_agent_token"] = ""
+	} else {
+		data["cluster_agent_token_set"] = "false"
+	}
 	response.OK(c, data)
 }
 

@@ -199,7 +199,9 @@ func (s *Service) Renew(id uint) (*models.SSLCertificate, error) {
 	if err := s.runCertbotIssue(&cert, true); err != nil {
 		return &cert, err
 	}
-	_ = s.DeployToWebsite(cert.Domain)
+	if err := s.DeployToWebsite(cert.Domain); err != nil {
+		return &cert, fmt.Errorf("证书已续签，但部署到网站失败: %w", err)
+	}
 	return &cert, nil
 }
 
@@ -216,7 +218,9 @@ func (s *Service) RenewAll() (int, []string, error) {
 			continue
 		}
 		n++
-		_ = s.DeployToWebsite(certs[i].Domain)
+		if err := s.DeployToWebsite(certs[i].Domain); err != nil {
+			failed = append(failed, certs[i].Domain+": deploy: "+err.Error())
+		}
 	}
 	return n, failed, nil
 }
@@ -425,13 +429,62 @@ func normalizeSAN(s string) string {
 
 func CertPaths(dataDir, domain string) (fullchain, privkey string, ok bool) {
 	domain = strings.TrimSpace(domain)
-	le := filepath.Join("/etc/letsencrypt/live", domain)
-	if f, err := os.Stat(filepath.Join(le, "fullchain.pem")); err == nil && !f.IsDir() {
-		return filepath.Join(le, "fullchain.pem"), filepath.Join(le, "privkey.pem"), true
+	type cand struct{ fc, pk string }
+	candidates := []cand{
+		{filepath.Join(dataDir, "ssl", domain, "fullchain.pem"), filepath.Join(dataDir, "ssl", domain, "privkey.pem")},
+		{filepath.Join("/etc/letsencrypt/live", domain, "fullchain.pem"), filepath.Join("/etc/letsencrypt/live", domain, "privkey.pem")},
 	}
-	local := filepath.Join(dataDir, "ssl", domain)
-	if f, err := os.Stat(filepath.Join(local, "fullchain.pem")); err == nil && !f.IsDir() {
-		return filepath.Join(local, "fullchain.pem"), filepath.Join(local, "privkey.pem"), true
+	var bestFC, bestPK, anyFC, anyPK string
+	var bestExp time.Time
+	now := time.Now()
+	for _, c := range candidates {
+		if st, err := os.Stat(c.fc); err != nil || st.IsDir() {
+			continue
+		}
+		if st, err := os.Stat(c.pk); err != nil || st.IsDir() {
+			continue
+		}
+		if anyFC == "" {
+			anyFC, anyPK = c.fc, c.pk
+		}
+		exp, err := pemNotAfter(c.fc)
+		if err != nil || !exp.After(now) {
+			continue
+		}
+		if exp.After(bestExp) {
+			bestExp = exp
+			bestFC, bestPK = c.fc, c.pk
+		}
+	}
+	if bestFC != "" {
+		return bestFC, bestPK, true
+	}
+	// Fall back to any on-disk cert (may be expired) so operators can still inspect/replace.
+	if anyFC != "" {
+		return anyFC, anyPK, true
 	}
 	return "", "", false
+}
+
+func pemNotAfter(fullchainPath string) (time.Time, error) {
+	data, err := os.ReadFile(fullchainPath)
+	if err != nil {
+		return time.Time{}, err
+	}
+	for {
+		var block *pem.Block
+		block, data = pem.Decode(data)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			continue
+		}
+		return cert.NotAfter, nil
+	}
+	return time.Time{}, fmt.Errorf("no certificate in %s", fullchainPath)
 }

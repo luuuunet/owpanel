@@ -111,7 +111,16 @@ func (s *Service) RemoveDomain(siteID, domainID uint) error {
 		return err
 	}
 	sitepurge.Domains(s.db, []string{entry.Domain}, sitepurge.Options{DataDir: s.dataDir})
-	return s.regenerateVhost(siteID)
+	if err := s.regenerateVhost(siteID); err != nil {
+		return err
+	}
+	site, _ := s.Get(siteID)
+	if site != nil {
+		if err := s.reissueSSLAfterDomainChange(site); err != nil {
+			return fmt.Errorf("域名已删除，但更新 SSL 证书失败: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) BindDomains(siteID uint, domains []string) error {

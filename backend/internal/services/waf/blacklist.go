@@ -14,9 +14,10 @@ func (s *Service) ListBlacklist() ([]models.IPBlacklist, error) {
 }
 
 func (s *Service) AddBlacklist(ip, reason, source string) (*models.IPBlacklist, error) {
-	ip = strings.TrimSpace(ip)
-	if ip == "" {
-		return nil, fmt.Errorf("ip is required")
+	var err error
+	ip, err = validateMapIP(ip)
+	if err != nil {
+		return nil, err
 	}
 	entry := models.IPBlacklist{IP: ip, Reason: reason, Source: source, Enabled: true}
 	if source == "" {

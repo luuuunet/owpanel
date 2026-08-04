@@ -92,6 +92,10 @@ func (s *Server) handleUpdateDNS(c *gin.Context) {
 		response.Error(c, 500, err.Error())
 		return
 	}
+	// Cloudflare orange-cloud + origin Force HTTPS causes redirect loops / empty responses.
+	if patch.Proxied != nil && *patch.Proxied && rec.WebsiteID > 0 && s.website != nil {
+		_ = s.website.DisableForceHTTPSForProxied(rec.WebsiteID)
+	}
 	response.OK(c, rec)
 }
 

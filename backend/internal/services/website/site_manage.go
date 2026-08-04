@@ -9,6 +9,7 @@ import (
 	"github.com/luuuunet/owpanel/internal/models"
 	"github.com/luuuunet/owpanel/internal/services/domaincheck"
 	"github.com/luuuunet/owpanel/internal/services/php"
+	sslpkg "github.com/luuuunet/owpanel/internal/services/ssl"
 )
 
 type UpdateRequest struct {
@@ -132,7 +133,15 @@ func (s *Service) RemoveDomain(siteID, aliasID uint) error {
 	if err != nil {
 		return err
 	}
-	return s.regenerateVhost(site)
+	if err := s.ApplyVhostForced(site); err != nil {
+		return err
+	}
+	if site.SSL {
+		if err := s.ReissueSSLWithAliases(siteID); err != nil {
+			return fmt.Errorf("域名已删除，但更新 SSL 证书失败: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) BatchRemoveDomains(siteID uint, aliasIDs []uint) error {
@@ -153,7 +162,15 @@ func (s *Service) BatchRemoveDomains(siteID uint, aliasIDs []uint) error {
 	if err != nil {
 		return err
 	}
-	return s.regenerateVhost(site)
+	if err := s.ApplyVhostForced(site); err != nil {
+		return err
+	}
+	if site.SSL {
+		if err := s.ReissueSSLWithAliases(siteID); err != nil {
+			return fmt.Errorf("域名已删除，但更新 SSL 证书失败: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) ApplyVhost(siteID uint) error {
@@ -187,7 +204,15 @@ func (s *Service) UpdateSite(siteID uint, req *UpdateRequest) (*models.Website, 
 		updates["php"] = usePHP
 	}
 	if req.SSL != nil {
+		if *req.SSL {
+			if _, _, ok := sslpkg.CertPaths(s.dataDir, site.Domain); !ok {
+				return nil, fmt.Errorf("证书文件不存在，请先申请或上传 SSL 证书后再开启")
+			}
+		}
 		updates["ssl"] = *req.SSL
+		if !*req.SSL {
+			updates["force_https"] = false
+		}
 	}
 	if req.ForceHTTPS != nil {
 		force := *req.ForceHTTPS
@@ -358,7 +383,8 @@ func (s *Service) SaveNginxConf(siteID uint, content string) error {
 			return fmt.Errorf("nginx -t 失败，已回滚: %v\n%s", err, out)
 		}
 		if err := s.ws.Reload(key); err != nil {
-			return fmt.Errorf("配置已保存但 reload 失败: %w", err)
+			_ = os.WriteFile(path, prev, 0644)
+			return fmt.Errorf("reload 失败，已回滚配置: %w", err)
 		}
 	}
 	return s.db.Model(site).Updates(map[string]interface{}{
@@ -416,7 +442,7 @@ func (s *Service) RegenerateAll() error {
 	}
 	for ws := range reloadWS {
 		if err := s.reloadWebServer(ws); err != nil {
-			return err
+			return fmt.Errorf("reload %s: %w", ws, err)
 		}
 	}
 	return nil

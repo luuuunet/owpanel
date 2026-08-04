@@ -158,10 +158,17 @@ func (m *Manager) Reload(key string) error {
 		}
 		return fmt.Errorf("服务未运行")
 	}
-	if err := m.apps.ServiceAction(key, "reload"); err != nil {
-		_ = m.apps.ServiceAction(key, "restart")
+	// Never restart on reload failure — untested/broken config + restart can take nginx down.
+	if out, err := m.TestConfig(key); err != nil {
+		return fmt.Errorf("config test failed: %v\n%s", err, out)
 	}
-	return m.tryDirectReload(key)
+	if err := m.apps.ServiceAction(key, "reload"); err != nil {
+		if err2 := m.tryDirectReload(key); err2 != nil {
+			return fmt.Errorf("reload failed: %v", err)
+		}
+		return nil
+	}
+	return nil
 }
 
 func (m *Manager) TestConfig(key string) (string, error) {
@@ -271,7 +278,7 @@ func (m *Manager) writeApacheMainInclude() {
 func (m *Manager) tryDirectReload(key string) error {
 	bin := webServerBinary(key)
 	if bin == "" {
-		return nil
+		return fmt.Errorf("binary not found for %s", key)
 	}
 	cmd := exec.Command(bin, "-s", "reload")
 	if runtime.GOOS == "windows" {

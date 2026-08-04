@@ -275,7 +275,11 @@ async function savePhp() {
 }
 
 async function saveSsl() {
-  await patchSite({ ssl: settings.value.ssl, force_https: settings.value.force_https })
+  const ssl = settings.value.ssl
+  await patchSite({
+    ssl,
+    force_https: ssl ? settings.value.force_https : false,
+  })
 }
 
 async function saveIndex() {

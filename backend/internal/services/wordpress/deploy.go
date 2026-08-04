@@ -61,6 +61,14 @@ func GetDeployJob(id string) (*DeployJob, bool) {
 	defer job.mu.Unlock()
 	snapshot := *job
 	snapshot.Logs = append([]string(nil), job.Logs...)
+	// One-shot credentials: expose secrets only once after success, then clear in-memory.
+	if snapshot.Status == "success" && (job.FtpPassword != "" || job.DbPassword != "") {
+		job.FtpPassword = ""
+		job.DbPassword = ""
+	} else if snapshot.Status != "success" {
+		snapshot.FtpPassword = ""
+		snapshot.DbPassword = ""
+	}
 	return &snapshot, true
 }
 

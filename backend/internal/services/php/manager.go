@@ -15,7 +15,7 @@ import (
 )
 
 var versionPorts = map[string]int{
-	"8.5": 9000, "8.4": 9004, "8.3": 9000, "8.2": 9001, "8.1": 9002, "7.4": 9003,
+	"8.5": 9014, "8.4": 9004, "8.3": 9000, "8.2": 9001, "8.1": 9002, "7.4": 9003,
 	"8.0": 9005, "7.3": 9006, "7.2": 9007,
 	"7.1": 9008, "7.0": 9009, "5.6": 9010, "5.5": 9011,
 	"5.4": 9012, "5.3": 9013,
@@ -163,9 +163,8 @@ func ResolveVersion(requested string) string {
 		if fileExists(filepath.Join("/etc/php", req, "fpm")) {
 			return req
 		}
-		if pref := PreferredInstalledVersion(); pref != "" {
-			return pref
-		}
+		// Keep the requested version (TCP port fallback). Do not silently
+		// substitute another installed PHP — that caused cryptic 502s.
 	}
 	return req
 }

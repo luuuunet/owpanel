@@ -33,6 +33,16 @@ func (s *Service) Update(id uint, req *UpdateRequest) (*models.WordPressSite, er
 			rp = filepath.Join(s.dataDir, rp)
 		}
 		rp = filepath.Clean(rp)
+		abs, err := filepath.Abs(rp)
+		if err != nil {
+			return nil, fmt.Errorf("无效根目录: %w", err)
+		}
+		dataAbs, _ := filepath.Abs(s.dataDir)
+		rel, err := filepath.Rel(dataAbs, abs)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return nil, fmt.Errorf("网站根目录必须位于面板数据目录内")
+		}
+		rp = abs
 		if err := os.MkdirAll(rp, 0755); err != nil {
 			return nil, fmt.Errorf("创建目录失败: %w", err)
 		}

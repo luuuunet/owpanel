@@ -295,7 +295,7 @@ func (s *Service) ToggleSite(id uint, status string) (*models.Website, error) {
 		return nil, err
 	}
 	site.Status = status
-	if err := s.applyVhost(site); err != nil {
+	if err := s.ApplyVhostForced(site); err != nil {
 		return nil, err
 	}
 	return site, nil

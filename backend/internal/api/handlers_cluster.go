@@ -29,7 +29,7 @@ func (s *Server) registerClusterRoutes(api *gin.RouterGroup) {
 	api.GET("/cluster/agent/token", middleware.RequireAdmin(), s.handleGetClusterAgentToken)
 	api.POST("/cluster/agent/regenerate-token", middleware.RequireAdmin(), s.handleRegenerateClusterAgentToken)
 
-	api.GET("/cluster/join-info", s.handleClusterJoinInfo)
+	api.GET("/cluster/join-info", middleware.RequireAdmin(), s.handleClusterJoinInfo)
 
 	api.GET("/load-balancers", s.handleListLoadBalancers)
 	api.POST("/load-balancers", s.handleCreateLoadBalancer)

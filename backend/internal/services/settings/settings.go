@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/luuuunet/owpanel/internal/models"
@@ -76,12 +77,25 @@ func (s *Service) GetAll() (map[string]string, error) {
 }
 
 func (s *Service) Update(data map[string]string) error {
+	blocked := map[string]bool{
+		"cluster_agent_token":  true,
+		"security_bootstrap_v1": true,
+	}
 	for k, v := range data {
+		if blocked[k] {
+			continue
+		}
 		if k == "ai_api_key" && strings.TrimSpace(v) == "" {
 			continue
 		}
 		if k == "ai_api_key" {
 			v = strings.TrimSpace(v)
+		}
+		if k == "panel_safe_path" {
+			v = strings.TrimSpace(v)
+			if v != "" && len(v) < 6 {
+				return fmt.Errorf("安全入口路径至少 6 个字符")
+			}
 		}
 		if err := s.set(k, v); err != nil {
 			return err

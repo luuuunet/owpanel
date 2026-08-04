@@ -14,9 +14,10 @@ func (s *Service) ListWhitelist() ([]models.IPWhitelist, error) {
 }
 
 func (s *Service) AddWhitelist(ip, reason, source string) (*models.IPWhitelist, error) {
-	ip = strings.TrimSpace(ip)
-	if ip == "" {
-		return nil, fmt.Errorf("ip is required")
+	var err error
+	ip, err = validateMapIP(ip)
+	if err != nil {
+		return nil, err
 	}
 	entry := models.IPWhitelist{IP: ip, Reason: reason, Source: source, Enabled: true}
 	if source == "" {

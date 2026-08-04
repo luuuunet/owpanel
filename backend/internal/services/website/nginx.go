@@ -58,7 +58,11 @@ func (s *Service) writeNginxVhost(site *models.Website) (string, error) {
 		blocks = append(blocks, block)
 	}
 	if site.SSL && certOK {
-		if sslBlock := s.sslServerBlock(site, root, site.Domain, features); sslBlock != "" {
+		sslBlock, err := s.sslServerBlock(site, root, site.Domain, features)
+		if err != nil {
+			return "", fmt.Errorf("SSL server block: %w", err)
+		}
+		if sslBlock != "" {
 			blocks = append(blocks, sslBlock)
 		}
 	}
@@ -236,10 +240,10 @@ func (s *Service) mainLocationBlock(site *models.Website, tryFallback, cacheProx
     }`, httpsGate, tryFallback, cacheRoot)
 }
 
-func (s *Service) sslServerBlock(site *models.Website, root, primary string, features *nginxFeatureBlocks) string {
+func (s *Service) sslServerBlock(site *models.Website, root, primary string, features *nginxFeatureBlocks) (string, error) {
 	fullchain, privkey, ok := sslpkg.CertPaths(s.dataDir, primary)
 	if !ok {
-		return ""
+		return "", nil
 	}
 	fullchain = filepath.ToSlash(fullchain)
 	privkey = filepath.ToSlash(privkey)
@@ -256,9 +260,9 @@ func (s *Service) sslServerBlock(site *models.Website, root, primary string, fea
 		enabled: true, fullchain: fullchain, privkey: privkey,
 	}, features, false)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return block
+	return block, nil
 }
 
 func (s *Service) removeNginxVhost(domain string) {
@@ -339,11 +343,7 @@ func (s *Service) writeVhostOnlyOpts(site *models.Website, force bool) (string, 
 
 // ApplyVhostForced regenerates vhost even when nginx_customized is set (domains/SSL).
 func (s *Service) ApplyVhostForced(site *models.Website) error {
-	ws, err := s.writeVhostOnlyOpts(site, true)
-	if err != nil {
-		return err
-	}
-	return s.reloadWebServer(ws)
+	return s.applyVhostOpts(site, true)
 }
 
 func (s *Service) reloadWebServer(ws string) error {
@@ -351,15 +351,44 @@ func (s *Service) reloadWebServer(ws string) error {
 		return nil
 	}
 	s.ws.EnsureVhostInclude(ws)
+	if ws == "nginx" || ws == "openresty" {
+		if out, err := s.ws.TestConfig(ws); err != nil {
+			return fmt.Errorf("nginx -t 失败: %v\n%s", err, out)
+		}
+	}
 	return s.ws.Reload(ws)
 }
 
 func (s *Service) applyVhost(site *models.Website) error {
-	ws, err := s.writeVhostOnly(site)
+	return s.applyVhostOpts(site, false)
+}
+
+func (s *Service) applyVhostOpts(site *models.Website, force bool) error {
+	confPath := strings.TrimSpace(site.NginxConf)
+	if confPath == "" {
+		ws := site.WebServer
+		if ws == "" {
+			ws = s.activeWebServer()
+		}
+		if ws == "apache" {
+			confPath = filepath.Join(s.vhostDir("apache"), site.Domain+".conf")
+		} else {
+			confPath = filepath.Join(s.vhostDir("nginx"), site.Domain+".conf")
+		}
+	}
+	prev, _ := os.ReadFile(confPath)
+
+	ws, err := s.writeVhostOnlyOpts(site, force)
 	if err != nil {
 		return err
 	}
-	return s.reloadWebServer(ws)
+	if err := s.reloadWebServer(ws); err != nil {
+		if len(prev) > 0 {
+			_ = os.WriteFile(confPath, prev, 0644)
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *Service) isWordPressManaged(websiteID uint) bool {

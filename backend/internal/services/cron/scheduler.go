@@ -109,6 +109,9 @@ func (s *Service) Create(job *models.CronJob) error {
 	if job.Name == "" || job.Command == "" {
 		return fmt.Errorf("名称和命令不能为空")
 	}
+	if strings.ContainsAny(job.Schedule, "\r\n") || strings.ContainsAny(job.Command, "\r\n") {
+		return fmt.Errorf("计划任务不允许包含换行符")
+	}
 	if err := validateSchedule(job.Schedule); err != nil {
 		return err
 	}
@@ -133,6 +136,9 @@ func (s *Service) Update(id uint, patch models.CronJob) (*models.CronJob, error)
 		job.Schedule = sched
 	}
 	if cmd := strings.TrimSpace(patch.Command); cmd != "" {
+		if strings.ContainsAny(cmd, "\r\n") {
+			return nil, fmt.Errorf("计划任务命令不允许包含换行符")
+		}
 		job.Command = cmd
 	}
 	if err := s.db.Save(&job).Error; err != nil {

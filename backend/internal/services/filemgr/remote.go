@@ -3,6 +3,7 @@ package filemgr
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -35,6 +36,9 @@ func (s *Service) DownloadFromURL(dir, rawURL, filename string) (*RemoteDownload
 	if scheme != "http" && scheme != "https" {
 		return nil, fmt.Errorf("仅支持 http/https 链接")
 	}
+	if err := assertPublicHTTPURL(u); err != nil {
+		return nil, err
+	}
 
 	destDir, err := s.resolvePath(dir)
 	if err != nil {
@@ -53,6 +57,9 @@ func (s *Service) DownloadFromURL(dir, rawURL, filename string) (*RemoteDownload
 			}
 			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
 				return fmt.Errorf("不允许的重定向协议")
+			}
+			if err := assertPublicHTTPURL(req.URL); err != nil {
+				return err
 			}
 			return nil
 		},
@@ -110,6 +117,32 @@ func (s *Service) DownloadFromURL(dir, rawURL, filename string) (*RemoteDownload
 		Name: name,
 		Size: written,
 	}, nil
+}
+
+func assertPublicHTTPURL(u *url.URL) error {
+	if u == nil || u.Hostname() == "" {
+		return fmt.Errorf("无效的 URL")
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".localhost") {
+		return fmt.Errorf("不允许下载内网地址")
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("无法解析主机: %w", err)
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("不允许下载内网地址")
+		}
+		// Cloud metadata / CGNAT
+		if ip4 := ip.To4(); ip4 != nil {
+			if ip4[0] == 169 && ip4[1] == 254 {
+				return fmt.Errorf("不允许下载内网地址")
+			}
+		}
+	}
+	return nil
 }
 
 func filenameFromHTTP(u *url.URL, resp *http.Response) string {

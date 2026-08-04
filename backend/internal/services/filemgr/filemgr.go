@@ -65,7 +65,36 @@ func (s *Service) resolvePath(path string) (string, error) {
 	if strings.Contains(p, "..") {
 		return "", fs.ErrPermission
 	}
-	return p, nil
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	if isSensitivePath(abs) {
+		return "", fs.ErrPermission
+	}
+	return abs, nil
+}
+
+// Block direct access to high-risk credential files while keeping admin FS browsing.
+func isSensitivePath(abs string) bool {
+	norm := strings.ToLower(filepath.ToSlash(abs))
+	blockedExact := []string{
+		"/etc/shadow", "/etc/gshadow", "/etc/sudoers",
+		"/etc/ssh/ssh_host_rsa_key", "/etc/ssh/ssh_host_ecdsa_key", "/etc/ssh/ssh_host_ed25519_key",
+	}
+	for _, b := range blockedExact {
+		if norm == b {
+			return true
+		}
+	}
+	if strings.Contains(norm, "/.ssh/id_") || strings.HasSuffix(norm, "/.ssh/id_rsa") ||
+		strings.HasSuffix(norm, "/.ssh/id_ed25519") || strings.HasSuffix(norm, "/.ssh/id_ecdsa") {
+		return true
+	}
+	if strings.Contains(norm, "/proc/") && (strings.HasSuffix(norm, "/mem") || strings.HasSuffix(norm, "/environ")) {
+		return true
+	}
+	return false
 }
 
 func formatMode(mode fs.FileMode) string {
