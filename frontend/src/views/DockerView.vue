@@ -4,8 +4,9 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api, { resolveApiError } from '@/api'
 import SoftwareInstallLogDialog from '@/components/SoftwareInstallLogDialog.vue'
+import DockerContainerDrawer from '@/components/DockerContainerDrawer.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Setting, Document, RefreshRight, Delete, VideoPlay, VideoPause, Link, CopyDocument, FolderOpened } from '@element-plus/icons-vue'
+import { Plus, Document, RefreshRight, Delete, VideoPlay, VideoPause, Link, CopyDocument, FolderOpened, View, Monitor } from '@element-plus/icons-vue'
 
 interface DockerStatus {
   installed: boolean
@@ -19,27 +20,6 @@ interface PortMapping {
   host_port: string
   container_port: string
   protocol: string
-}
-
-interface MountMapping {
-  type: string
-  source: string
-  destination: string
-  read_only: boolean
-}
-
-interface ContainerDetail {
-  id: string
-  name: string
-  image: string
-  status: string
-  ports: PortMapping[]
-  env: string[]
-  mounts: MountMapping[]
-  networks: string[]
-  restart_policy: string
-  command: string[]
-  working_dir: string
 }
 
 interface DockerVolume {
@@ -92,14 +72,6 @@ const logsContent = ref('')
 const logsTitle = ref('')
 const logsLoading = ref(false)
 
-const detailVisible = ref(false)
-const detailLoading = ref(false)
-const detailSaving = ref(false)
-const detail = ref<ContainerDetail | null>(null)
-const editPorts = ref<PortMapping[]>([])
-const editEnvText = ref('')
-const editRestart = ref('no')
-
 const createVisible = ref(false)
 const createSaving = ref(false)
 const createForm = ref({
@@ -141,7 +113,42 @@ const domainInput = ref('')
 const domainHostPort = ref<number | null>(null)
 const domainPortOptions = ref<number[]>([])
 
+const overview = ref<any>(null)
+const events = ref<any[]>([])
+const eventsLoading = ref(false)
+const eventsSince = ref(3600)
+
+const drawerVisible = ref(false)
+const drawerId = ref('')
+const drawerName = ref('')
+const drawerStatus = ref('')
+
+const imageInspectVisible = ref(false)
+const imageInspectLoading = ref(false)
+const imageInspectJson = ref('')
+const imageInspectTitle = ref('')
+const tagVisible = ref(false)
+const tagSource = ref('')
+const tagTarget = ref('')
+const tagLoading = ref(false)
+
+const connectContainer = ref('')
+const networkConnectLoading = ref(false)
+
 const dockerReady = computed(() => status.value?.installed && status.value?.daemon_ok)
+
+const overviewCards = computed(() => {
+  const ov = overview.value
+  if (!ov) return []
+  return [
+    { key: 'running', label: t('docker.ovRunning'), value: ov.containers_running ?? 0 },
+    { key: 'stopped', label: t('docker.ovStopped'), value: ov.containers_stopped ?? 0 },
+    { key: 'images', label: t('docker.images'), value: ov.images ?? 0 },
+    { key: 'cpus', label: 'CPUs', value: ov.cpus ?? '—' },
+    { key: 'mem', label: t('docker.ovMemory'), value: ov.memory_total || '—' },
+    { key: 'imgSize', label: t('docker.ovImagesSize'), value: ov.images_size || '—' },
+  ]
+})
 
 const volumeStats = computed(() => {
   const list = volumes.value as DockerVolume[]
@@ -275,6 +282,35 @@ async function loadStatus() {
   }
 }
 
+async function loadOverview() {
+  if (!status.value?.daemon_ok) {
+    overview.value = null
+    return
+  }
+  try {
+    const res: any = await api.get('/docker/overview')
+    overview.value = res.data || null
+  } catch {
+    overview.value = null
+  }
+}
+
+async function loadEvents() {
+  if (!dockerReady.value) {
+    events.value = []
+    return
+  }
+  eventsLoading.value = true
+  try {
+    const res: any = await api.get('/docker/events', { params: { since: eventsSince.value } })
+    events.value = res.data || []
+  } catch {
+    events.value = []
+  } finally {
+    eventsLoading.value = false
+  }
+}
+
 async function load() {
   loading.value = true
   try {
@@ -284,6 +320,8 @@ async function load() {
       images.value = []
       volumes.value = []
       networks.value = []
+      overview.value = null
+      events.value = []
       return
     }
     const [c, i, v, n]: any[] = await Promise.all([
@@ -296,6 +334,8 @@ async function load() {
     images.value = i.data || []
     volumes.value = v.data || []
     networks.value = n.data || []
+    await loadOverview()
+    if (activeTab.value === 'events') await loadEvents()
   } finally {
     loading.value = false
   }
@@ -403,31 +443,113 @@ async function openLogs(row: any) {
   }
 }
 
-async function openDetail(row: any) {
-  detailVisible.value = true
-  detailLoading.value = true
-  detail.value = null
+function openContainerDrawer(row: any) {
+  drawerId.value = row.id
+  drawerName.value = row.name
+  drawerStatus.value = row.status
+  drawerVisible.value = true
+}
+
+async function unpauseContainer(id: string) {
+  actionLoading.value = id
   try {
-    const res: any = await api.get(`/docker/containers/${row.id}`)
-    detail.value = { ...res.data, image: row.image || res.data.image }
-    editPorts.value = (res.data.ports || []).map((p: PortMapping) => ({ ...p, protocol: p.protocol || 'tcp' }))
-    if (!editPorts.value.length) editPorts.value = [{ host_ip: '', host_port: '', container_port: '', protocol: 'tcp' }]
-    editEnvText.value = (res.data.env || []).join('\n')
-    editRestart.value = res.data.restart_policy || 'no'
+    await api.post(`/docker/containers/${id}/unpause`)
+    ElMessage.success(t('common.success'))
+    await load()
   } catch (e: any) {
     ElMessage.error(resolveApiError(e, t('common.failed')))
-    detailVisible.value = false
   } finally {
-    detailLoading.value = false
+    actionLoading.value = null
   }
 }
 
-function addPortRow() {
-  editPorts.value.push({ host_ip: '', host_port: '', container_port: '', protocol: 'tcp' })
+async function openImageInspect(row: any) {
+  imageInspectTitle.value = row.repo_tags || row.id
+  imageInspectVisible.value = true
+  imageInspectLoading.value = true
+  imageInspectJson.value = ''
+  try {
+    const res: any = await api.get(`/docker/images/${encodeURIComponent(row.id)}/inspect`)
+    imageInspectJson.value = JSON.stringify(res.data?.inspect ?? res.data, null, 2)
+  } catch (e: any) {
+    imageInspectJson.value = resolveApiError(e, t('common.failed'))
+  } finally {
+    imageInspectLoading.value = false
+  }
 }
 
-function removePortRow(i: number) {
-  editPorts.value.splice(i, 1)
+function openTagDialog(row: any) {
+  tagSource.value = (row.repo_tags || '').split(',')[0]?.trim() || row.id
+  tagTarget.value = ''
+  tagVisible.value = true
+}
+
+async function submitTagImage() {
+  if (!tagSource.value || !tagTarget.value.trim()) {
+    ElMessage.warning(t('docker.tagRequired'))
+    return
+  }
+  tagLoading.value = true
+  try {
+    await api.post('/docker/images/tag', { source: tagSource.value, target: tagTarget.value.trim() })
+    ElMessage.success(t('docker.tagSuccess'))
+    tagVisible.value = false
+    await load()
+  } catch (e: any) {
+    ElMessage.error(resolveApiError(e, t('common.failed')))
+  } finally {
+    tagLoading.value = false
+  }
+}
+
+async function connectNetworkAction() {
+  if (!activeNetwork.value || !connectContainer.value.trim()) return
+  networkConnectLoading.value = true
+  try {
+    await api.post(`/docker/networks/${activeNetwork.value.id}/connect`, { container: connectContainer.value.trim() })
+    ElMessage.success(t('docker.networkConnected'))
+    connectContainer.value = ''
+    await load()
+    const net = networks.value.find((n: any) => n.id === activeNetwork.value?.id || n.name === activeNetwork.value?.name)
+    if (net) activeNetwork.value = net
+  } catch (e: any) {
+    ElMessage.error(resolveApiError(e, t('common.failed')))
+  } finally {
+    networkConnectLoading.value = false
+  }
+}
+
+async function disconnectNetworkEndpoint(name: string) {
+  if (!activeNetwork.value) return
+  try {
+    await ElMessageBox.confirm(t('docker.networkDisconnectConfirm', { name }), t('common.warning'), { type: 'warning' })
+  } catch { return }
+  networkConnectLoading.value = true
+  try {
+    await api.post(`/docker/networks/${activeNetwork.value.id}/disconnect`, { container: name, force: true })
+    ElMessage.success(t('docker.networkDisconnected'))
+    await load()
+    const net = networks.value.find((n: any) => n.id === activeNetwork.value?.id || n.name === activeNetwork.value?.name)
+    if (net) activeNetwork.value = net
+  } catch (e: any) {
+    ElMessage.error(resolveApiError(e, t('common.failed')))
+  } finally {
+    networkConnectLoading.value = false
+  }
+}
+
+function formatEventTime(ts: number) {
+  if (!ts) return '—'
+  return new Date(ts * 1000).toLocaleString()
+}
+
+function isPausedStatus(s: string) {
+  return (s || '').toLowerCase().includes('paused')
+}
+
+function isRunningStatus(s: string) {
+  const v = (s || '').toLowerCase()
+  return v.includes('up') && !v.includes('paused')
 }
 
 function parsePortsText(text: string): PortMapping[] {
@@ -445,31 +567,6 @@ function parsePortsText(text: string): PortMapping[] {
 
 function parseLines(text: string) {
   return text.split('\n').map((l) => l.trim()).filter(Boolean)
-}
-
-async function saveContainerDetail() {
-  if (!detail.value) return
-  try {
-    await ElMessageBox.confirm(t('docker.recreateConfirm'), t('common.confirm'), { type: 'warning' })
-  } catch {
-    return
-  }
-  detailSaving.value = true
-  try {
-    const ports = editPorts.value.filter((p) => p.host_port && p.container_port)
-    await api.post(`/docker/containers/${detail.value.id}/recreate`, {
-      ports,
-      env: parseLines(editEnvText.value),
-      restart_policy: editRestart.value,
-    })
-    ElMessage.success(t('docker.recreateSuccess'))
-    detailVisible.value = false
-    await load()
-  } catch (e: any) {
-    ElMessage.error(resolveApiError(e, t('common.failed')))
-  } finally {
-    detailSaving.value = false
-  }
 }
 
 function openCreateContainer() {
@@ -723,6 +820,10 @@ async function unbindDomain() {
   }
 }
 
+function onDockerTabChange(name: string | number) {
+  if (name === 'events') loadEvents()
+}
+
 function onFabClick() {
   if (activeTab.value === 'containers') openCreateContainer()
   else if (activeTab.value === 'images') { pullImage.value = ''; pullVisible.value = true }
@@ -771,12 +872,28 @@ onMounted(load)
       {{ t('compose.dockerUnavailable') }}
     </el-alert>
 
-    <el-tabs v-model="activeTab">
+    <div v-if="dockerReady && overviewCards.length" class="docker-overview">
+      <div v-for="card in overviewCards" :key="card.key" class="ov-card">
+        <span class="ov-value">{{ card.value }}</span>
+        <span class="ov-label">{{ card.label }}</span>
+      </div>
+      <div v-if="overview?.server_version || overview?.driver" class="ov-meta">
+        <span v-if="overview.server_version">Engine {{ overview.server_version }}</span>
+        <span v-if="overview.driver">· {{ overview.driver }}</span>
+        <span v-if="overview.operating_system">· {{ overview.operating_system }}</span>
+      </div>
+    </div>
+
+    <el-tabs v-model="activeTab" @tab-change="onDockerTabChange">
       <el-tab-pane :label="t('docker.containers')" name="containers">
-        <el-table v-loading="loading" :data="containers" stripe>
-          <el-table-column prop="name" :label="t('common.name')" min-width="140" />
+        <el-table v-loading="loading" :data="containers" stripe @row-dblclick="openContainerDrawer">
+          <el-table-column prop="name" :label="t('common.name')" min-width="140">
+            <template #default="{ row }">
+              <a class="domain-link" href="#" @click.prevent="openContainerDrawer(row)">{{ row.name }}</a>
+            </template>
+          </el-table-column>
           <el-table-column prop="image" :label="t('docker.image')" min-width="160" show-overflow-tooltip />
-          <el-table-column prop="status" :label="t('common.status')" width="130">
+          <el-table-column prop="status" :label="t('common.status')" width="140">
             <template #default="{ row }">
               <el-tag :type="statusTagType(row.status)" size="small" effect="plain">{{ row.status }}</el-tag>
             </template>
@@ -788,14 +905,14 @@ onMounted(load)
               <span v-else class="muted-text">{{ t('docker.domainUnbound') }}</span>
             </template>
           </el-table-column>
-          <el-table-column v-if="dockerReady" :label="t('common.actions')" width="230" fixed="right" align="center">
+          <el-table-column v-if="dockerReady" :label="t('common.actions')" width="250" fixed="right" align="center">
             <template #default="{ row }">
               <div class="docker-actions">
+                <el-tooltip :content="t('docker.containerDetail')" placement="top">
+                  <el-button text type="primary" size="small" :icon="Monitor" @click="openContainerDrawer(row)" />
+                </el-tooltip>
                 <el-tooltip :content="t('docker.bindDomainTitle')" placement="top">
                   <el-button text type="primary" size="small" :icon="Link" @click="openDomainDialog(row)" />
-                </el-tooltip>
-                <el-tooltip :content="t('docker.settings')" placement="top">
-                  <el-button text type="primary" size="small" :icon="Setting" @click="openDetail(row)" />
                 </el-tooltip>
                 <el-tooltip :content="t('docker.logs')" placement="top">
                   <el-button text type="primary" size="small" :icon="Document" @click="openLogs(row)" />
@@ -803,10 +920,13 @@ onMounted(load)
                 <el-tooltip :content="t('docker.restart')" placement="top">
                   <el-button text type="primary" size="small" :icon="RefreshRight" :loading="actionLoading === row.id" @click="restartContainer(row.id)" />
                 </el-tooltip>
-                <el-tooltip :content="t('common.start')" placement="top">
+                <el-tooltip v-if="isPausedStatus(row.status)" :content="t('docker.unpause')" placement="top">
+                  <el-button text type="success" size="small" :icon="VideoPlay" :loading="actionLoading === row.id" @click="unpauseContainer(row.id)" />
+                </el-tooltip>
+                <el-tooltip v-else-if="!isRunningStatus(row.status)" :content="t('common.start')" placement="top">
                   <el-button text type="success" size="small" :icon="VideoPlay" :loading="actionLoading === row.id" @click="startContainer(row.id)" />
                 </el-tooltip>
-                <el-tooltip :content="t('common.stop')" placement="top">
+                <el-tooltip v-else :content="t('common.stop')" placement="top">
                   <el-button text type="warning" size="small" :icon="VideoPause" :loading="actionLoading === row.id" @click="stopContainer(row.id)" />
                 </el-tooltip>
                 <el-tooltip :content="t('common.delete')" placement="top">
@@ -829,11 +949,19 @@ onMounted(load)
           <el-table-column prop="id" label="ID" width="140" show-overflow-tooltip />
           <el-table-column prop="size" :label="t('files.size')" width="100" />
           <el-table-column prop="created" :label="t('files.modified')" width="120" />
-          <el-table-column v-if="dockerReady" :label="t('common.actions')" width="72" fixed="right" align="center">
+          <el-table-column v-if="dockerReady" :label="t('common.actions')" width="140" fixed="right" align="center">
             <template #default="{ row }">
-              <el-tooltip :content="t('common.delete')" placement="top">
-                <el-button text type="danger" size="small" :icon="Delete" @click="removeImage(row)" />
-              </el-tooltip>
+              <div class="docker-actions">
+                <el-tooltip :content="t('docker.tabInspect')" placement="top">
+                  <el-button text type="primary" size="small" :icon="View" @click="openImageInspect(row)" />
+                </el-tooltip>
+                <el-tooltip :content="t('docker.tagImage')" placement="top">
+                  <el-button text type="primary" size="small" @click="openTagDialog(row)">Tag</el-button>
+                </el-tooltip>
+                <el-tooltip :content="t('common.delete')" placement="top">
+                  <el-button text type="danger" size="small" :icon="Delete" @click="removeImage(row)" />
+                </el-tooltip>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -1062,6 +1190,27 @@ onMounted(load)
         </el-table>
         <el-empty v-if="!filteredNetworks.length && !loading" :description="t('docker.emptyNetworks')" />
       </el-tab-pane>
+
+      <el-tab-pane :label="t('docker.events')" name="events">
+        <div class="tab-toolbar">
+          <el-select v-model="eventsSince" style="width: 160px" @change="loadEvents">
+            <el-option :label="t('docker.events1h')" :value="3600" />
+            <el-option :label="t('docker.events6h')" :value="21600" />
+            <el-option :label="t('docker.events24h')" :value="86400" />
+          </el-select>
+          <el-button :loading="eventsLoading" @click="loadEvents">{{ t('common.refresh') }}</el-button>
+        </div>
+        <el-table v-loading="eventsLoading" :data="events" stripe size="small">
+          <el-table-column :label="t('files.modified')" width="170">
+            <template #default="{ row }">{{ formatEventTime(row.time) }}</template>
+          </el-table-column>
+          <el-table-column prop="type" :label="t('common.type')" width="100" />
+          <el-table-column prop="action" :label="t('common.actions')" width="120" />
+          <el-table-column prop="actor" :label="t('common.name')" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="id" label="ID" min-width="160" show-overflow-tooltip />
+        </el-table>
+        <el-empty v-if="!events.length && !eventsLoading" :description="t('docker.emptyEvents')" />
+      </el-tab-pane>
     </el-tabs>
 
     <el-button v-if="dockerReady" class="fab" type="primary" circle :icon="Plus" @click="onFabClick" />
@@ -1087,53 +1236,34 @@ onMounted(load)
       </template>
     </el-dialog>
 
-    <!-- 容器设置 -->
-    <el-dialog v-model="detailVisible" :title="t('docker.containerSettings')" width="720px" destroy-on-close>
-      <div v-loading="detailLoading">
-        <template v-if="detail">
-          <el-descriptions :column="2" border size="small" class="detail-meta">
-            <el-descriptions-item :label="t('common.name')">{{ detail.name }}</el-descriptions-item>
-            <el-descriptions-item :label="t('docker.image')">{{ detail.image }}</el-descriptions-item>
-            <el-descriptions-item :label="t('common.status')">{{ detail.status }}</el-descriptions-item>
-            <el-descriptions-item :label="t('docker.restartPolicy')">{{ editRestart }}</el-descriptions-item>
-          </el-descriptions>
+    <DockerContainerDrawer
+      v-model="drawerVisible"
+      :container-id="drawerId"
+      :container-name="drawerName"
+      :container-status="drawerStatus"
+      @changed="load"
+    />
 
-          <el-alert type="info" :closable="false" show-icon class="recreate-hint">{{ t('docker.portChangeHint') }}</el-alert>
-
-          <h4>{{ t('docker.portMappings') }}</h4>
-          <div v-for="(p, i) in editPorts" :key="i" class="port-row">
-            <el-input v-model="p.host_port" :placeholder="t('docker.hostPort')" />
-            <span class="port-arrow">→</span>
-            <el-input v-model="p.container_port" :placeholder="t('docker.containerPort')" />
-            <el-select v-model="p.protocol" style="width: 90px">
-              <el-option label="TCP" value="tcp" />
-              <el-option label="UDP" value="udp" />
-            </el-select>
-            <el-button text type="danger" @click="removePortRow(i)">{{ t('common.delete') }}</el-button>
-          </div>
-          <el-button text type="primary" @click="addPortRow">+ {{ t('docker.addPort') }}</el-button>
-
-          <h4>{{ t('docker.envVars') }}</h4>
-          <el-input v-model="editEnvText" type="textarea" :rows="5" :placeholder="t('docker.envPlaceholder')" />
-
-          <el-form-item :label="t('docker.restartPolicy')" class="restart-row">
-            <el-select v-model="editRestart" style="width: 200px">
-              <el-option :label="t('docker.restartNo')" value="no" />
-              <el-option :label="t('docker.restartAlways')" value="always" />
-              <el-option :label="t('docker.restartUnlessStopped')" value="unless-stopped" />
-            </el-select>
-          </el-form-item>
-        </template>
-      </div>
-      <template #footer>
-        <el-button @click="detailVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="detailSaving" @click="saveContainerDetail">{{ t('docker.saveAndRecreate') }}</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 日志 -->
+    <!-- 日志快照 -->
     <el-dialog v-model="logsVisible" :title="`${t('docker.logs')} - ${logsTitle}`" width="800px">
       <pre v-loading="logsLoading" class="log-pre">{{ logsContent }}</pre>
+    </el-dialog>
+
+    <el-dialog v-model="imageInspectVisible" :title="`${t('docker.tabInspect')} - ${imageInspectTitle}`" width="720px" destroy-on-close>
+      <pre v-loading="imageInspectLoading" class="log-pre">{{ imageInspectJson }}</pre>
+    </el-dialog>
+
+    <el-dialog v-model="tagVisible" :title="t('docker.tagImage')" width="480px" destroy-on-close>
+      <el-form label-width="88px">
+        <el-form-item :label="t('docker.tagSource')"><el-input v-model="tagSource" disabled /></el-form-item>
+        <el-form-item :label="t('docker.tagTarget')" required>
+          <el-input v-model="tagTarget" placeholder="myrepo/app:v1" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="tagVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="tagLoading" @click="submitTagImage">{{ t('common.save') }}</el-button>
+      </template>
     </el-dialog>
 
     <!-- 创建容器 -->
@@ -1233,9 +1363,23 @@ onMounted(load)
           <el-table :data="activeNetwork.endpoints" size="small" stripe>
             <el-table-column prop="name" :label="t('common.name')" min-width="120" />
             <el-table-column prop="ipv4" label="IPv4" width="130" />
+            <el-table-column v-if="dockerReady" :label="t('common.actions')" width="90" align="center">
+              <template #default="{ row }">
+                <el-button text type="danger" size="small" @click="disconnectNetworkEndpoint(row.name)">{{ t('docker.disconnect') }}</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
         <el-empty v-else :description="t('docker.networkNoContainers')" :image-size="64" />
+        <div v-if="dockerReady" class="drawer-section">
+          <h4>{{ t('docker.connectContainer') }}</h4>
+          <div class="inline-connect">
+            <el-select v-model="connectContainer" filterable allow-create default-first-option style="flex: 1" :placeholder="t('docker.connectContainerPlaceholder')">
+              <el-option v-for="c in containers" :key="c.id" :label="c.name" :value="c.name" />
+            </el-select>
+            <el-button type="primary" :loading="networkConnectLoading" @click="connectNetworkAction">{{ t('docker.connect') }}</el-button>
+          </div>
+        </div>
         <div class="drawer-actions">
           <el-button :icon="CopyDocument" @click="copyToClipboard(activeNetwork.id)">{{ t('docker.copyNetworkId') }}</el-button>
           <el-button v-if="dockerReady && !activeNetwork.is_system" type="danger" plain :icon="Delete" @click="removeNetwork(activeNetwork)">
@@ -1257,7 +1401,31 @@ onMounted(load)
 
 <style scoped>
 .docker-page { position: relative; padding-bottom: 72px; }
+.docker-overview {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+  position: relative;
+}
+.ov-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-blank);
+}
+.ov-value { display: block; font-size: 20px; font-weight: 600; line-height: 1.2; }
+.ov-label { display: block; margin-top: 4px; font-size: 12px; color: var(--el-text-color-secondary); }
+.ov-meta {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.inline-connect { display: flex; gap: 8px; align-items: center; }
 .page-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+@media (max-width: 1100px) {
+  .docker-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .page-header h2 { margin: 0; }
 .header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .status-badge { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--el-text-color-regular); }

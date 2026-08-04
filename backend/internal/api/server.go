@@ -621,6 +621,13 @@ func (s *Server) registerRoutes(r gin.IRouter, engine *gin.Engine, safePath stri
 		wsShell.Use(enterprise.InfraAuditMiddleware(s.enterprise))
 		wsShell.GET("/terminal/ws", s.handleTerminalWSAuth)
 
+		wsDocker := api.Group("")
+		wsDocker.Use(middleware.AuthAllowQueryToken(s.authSvc))
+		wsDocker.Use(middleware.RequirePermission("docker"))
+		wsDocker.Use(middleware.RateLimitStrict("docker-exec"))
+		wsDocker.Use(enterprise.InfraAuditMiddleware(s.enterprise))
+		wsDocker.GET("/docker/containers/:id/exec/ws", s.handleDockerExecWS)
+
 		authorized := api.Group("")
 		authorized.Use(middleware.Auth(s.authSvc))
 		{
