@@ -78,12 +78,23 @@ func (s *Service) GetAll() (map[string]string, error) {
 
 func (s *Service) Update(data map[string]string) error {
 	blocked := map[string]bool{
-		"cluster_agent_token":  true,
+		"cluster_agent_token":   true,
 		"security_bootstrap_v1": true,
 	}
+	defaults := s.baseDefaults()
+	defaults["panel_safe_path"] = ""
+	defaults["hf_token"] = ""
 	for k, v := range data {
 		if blocked[k] {
-			continue
+			return fmt.Errorf("%s 请使用专用接口修改", k)
+		}
+		if _, ok := defaults[k]; !ok {
+			// Allow updating existing keys (modules), but do not create arbitrary new ones.
+			var n int64
+			s.db.Model(&models.PanelSetting{}).Where("key = ?", k).Count(&n)
+			if n == 0 {
+				continue
+			}
 		}
 		if k == "ai_api_key" && strings.TrimSpace(v) == "" {
 			continue
@@ -93,7 +104,10 @@ func (s *Service) Update(data map[string]string) error {
 		}
 		if k == "panel_safe_path" {
 			v = strings.TrimSpace(v)
-			if v != "" && len(v) < 6 {
+			if v == "" {
+				return fmt.Errorf("不能清空安全入口路径")
+			}
+			if len(v) < 6 {
 				return fmt.Errorf("安全入口路径至少 6 个字符")
 			}
 		}
@@ -102,6 +116,11 @@ func (s *Service) Update(data map[string]string) error {
 		}
 	}
 	return nil
+}
+
+// Set writes a setting bypassing the public Update allowlist (internal/service use).
+func (s *Service) Set(key, value string) error {
+	return s.set(key, value)
 }
 
 func (s *Service) set(key, value string) error {

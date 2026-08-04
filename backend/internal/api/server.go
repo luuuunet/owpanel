@@ -572,7 +572,7 @@ func (s *Server) runInitialSecurityBootstrap() {
 		return
 	}
 	s.runSecurityAutoFix(true)
-	_ = s.settings.Update(map[string]string{securityBootstrapKey: "done"})
+	_ = s.settings.Set(securityBootstrapKey, "done")
 }
 
 func (s *Server) runSecurityAutoFix(initial bool) {
@@ -1413,7 +1413,19 @@ func parseID(c *gin.Context) uint {
 }
 
 func parseParamID(c *gin.Context, name string) uint {
-	var id uint
-	fmt.Sscanf(c.Param(name), "%d", &id)
-	return id
+	id, err := strconv.ParseUint(c.Param(name), 10, 64)
+	if err != nil || id == 0 {
+		return 0
+	}
+	return uint(id)
+}
+
+// requireID parses :id and aborts with 400 when missing/invalid.
+func requireID(c *gin.Context) (uint, bool) {
+	id := parseID(c)
+	if id == 0 {
+		response.Error(c, 400, "invalid id")
+		return 0, false
+	}
+	return id, true
 }

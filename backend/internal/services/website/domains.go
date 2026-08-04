@@ -3,6 +3,8 @@ package website
 import (
 	"strconv"
 	"strings"
+
+	"github.com/luuuunet/owpanel/internal/services/domaincheck"
 )
 
 type domainEntry struct {
@@ -50,13 +52,24 @@ func parseDomainList(raw string) []domainEntry {
 }
 
 func normalizeDomain(d string) string {
-	d = strings.TrimSpace(strings.ToLower(d))
-	d = strings.TrimPrefix(d, "http://")
-	d = strings.TrimPrefix(d, "https://")
-	if idx := strings.Index(d, "/"); idx >= 0 {
-		d = d[:idx]
+	return domaincheck.HostOnly(d)
+}
+
+// confFileName returns a safe nginx/apache vhost filename for a domain.
+func confFileName(domain string) string {
+	d := domaincheck.HostOnly(domain)
+	d = strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '-', r == '_':
+			return r
+		default:
+			return '_'
+		}
+	}, d)
+	if d == "" || d == "." || d == ".." {
+		d = "site"
 	}
-	return d
+	return d + ".conf"
 }
 
 func groupByPort(entries []domainEntry) map[int][]string {

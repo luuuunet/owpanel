@@ -96,8 +96,8 @@ type outboundMessage struct {
 }
 
 func (m outboundMessage) fromHeader() string {
-	from := strings.TrimSpace(m.From)
-	name := strings.TrimSpace(m.FromName)
+	from := sanitizeHeaderValue(m.From)
+	name := sanitizeHeaderValue(m.FromName)
 	if name != "" {
 		return fmt.Sprintf("%s <%s>", name, from)
 	}

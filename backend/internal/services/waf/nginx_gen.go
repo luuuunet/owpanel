@@ -84,6 +84,10 @@ func (s *Service) Apply() (*ApplyResult, error) {
 		return nil, err
 	}
 	confPath := s.ConfPath()
+	prev, _ := os.ReadFile(confPath)
+	blPrev, _ := os.ReadFile(s.BlacklistMapPath())
+	wlPrev, _ := os.ReadFile(s.WhitelistMapPath())
+
 	if err := os.WriteFile(confPath, []byte(content), 0644); err != nil {
 		return nil, err
 	}
@@ -99,28 +103,37 @@ func (s *Service) Apply() (*ApplyResult, error) {
 	reloaded := false
 	confInclude := nginxPath(confPath)
 	msg := "配置已写入 " + confInclude + "，请在 nginx/openresty http {} 中添加: include " + confInclude + ";"
+	var testErr error
 	for _, bin := range []string{"openresty", "nginx"} {
 		path, err := exec.LookPath(bin)
 		if err != nil {
 			continue
 		}
-		if err := exec.Command(path, "-t").Run(); err != nil {
+		out, err := exec.Command(path, "-t").CombinedOutput()
+		if err != nil {
+			testErr = fmt.Errorf("%s -t: %v (%s)", bin, err, strings.TrimSpace(string(out)))
 			continue
 		}
 		if err := exec.Command(path, "-s", "reload").Run(); err == nil {
 			reloaded = true
 			msg = "Web 服务器安全配置已应用并重载 (" + bin + ")"
+			testErr = nil
 			break
 		}
+		testErr = fmt.Errorf("%s reload failed", bin)
 	}
-	if !reloaded {
-		for _, unit := range []string{"openresty", "nginx"} {
-			if err := exec.Command("systemctl", "reload", unit).Run(); err == nil {
-				reloaded = true
-				msg = "Web 服务器安全配置已应用并重载 (" + unit + ")"
-				break
-			}
+	if testErr != nil && !reloaded {
+		// Roll back broken WAF config so a future nginx restart does not brick all sites.
+		if len(prev) > 0 {
+			_ = os.WriteFile(confPath, prev, 0644)
 		}
+		if len(blPrev) > 0 {
+			_ = os.WriteFile(s.BlacklistMapPath(), blPrev, 0644)
+		}
+		if len(wlPrev) > 0 {
+			_ = os.WriteFile(s.WhitelistMapPath(), wlPrev, 0644)
+		}
+		return nil, fmt.Errorf("安全配置校验失败，已回滚: %w", testErr)
 	}
 
 	return &ApplyResult{
@@ -444,7 +457,14 @@ ignoreregex =
 }
 
 func escapeNginxRegex(p string) string {
+	p = strings.TrimSpace(p)
+	p = strings.ReplaceAll(p, "\r", "")
+	p = strings.ReplaceAll(p, "\n", "")
 	p = strings.ReplaceAll(p, `"`, `\"`)
+	// Prevent breaking out of map entries / injecting nginx directives.
+	p = strings.ReplaceAll(p, ";", "")
+	p = strings.ReplaceAll(p, "{", "")
+	p = strings.ReplaceAll(p, "}", "")
 	return p
 }
 

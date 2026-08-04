@@ -41,11 +41,23 @@ func authenticate(c *gin.Context, authSvc *auth.Service, allowQueryToken bool) b
 		return false
 	}
 
+	role := claims.Role
+	perms := claims.Permissions
+	quota := claims.DiskQuotaMB
+	// Refresh non-admin permissions from DB so revokes take effect before JWT expiry.
+	if claims.UserID > 0 && role != "admin" {
+		if u, err := authSvc.GetUser(claims.UserID); err == nil && u != nil {
+			role = u.Role
+			perms = u.Permissions
+			quota = u.DiskQuotaMB
+		}
+	}
+
 	c.Set("user_id", claims.UserID)
 	c.Set("username", claims.Username)
-	c.Set("role", claims.Role)
-	c.Set("permissions", claims.Permissions)
-	c.Set("disk_quota_mb", claims.DiskQuotaMB)
+	c.Set("role", role)
+	c.Set("permissions", perms)
+	c.Set("disk_quota_mb", quota)
 	return true
 }
 

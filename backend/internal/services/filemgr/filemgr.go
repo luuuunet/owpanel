@@ -23,6 +23,7 @@ type FileInfo struct {
 type Service struct {
 	defaultRoot string
 	dataDir     string
+	allowSystem bool // admin-only: browse outside dataDir
 }
 
 func NewService(dataDir string) *Service {
@@ -31,6 +32,13 @@ func NewService(dataDir string) *Service {
 		root = "/"
 	}
 	return &Service{defaultRoot: root, dataDir: dataDir}
+}
+
+// ForAdmin returns a shallow copy with system-root browsing enabled for admins.
+func (s *Service) ForAdmin(admin bool) *Service {
+	cp := *s
+	cp.allowSystem = admin
+	return &cp
 }
 
 func (s *Service) DefaultRoot() string {
@@ -44,10 +52,12 @@ func (s *Service) Roots() []map[string]string {
 	if s.dataDir != "" {
 		roots = append(roots, map[string]string{"label": "data", "path": s.dataDir})
 	}
-	if runtime.GOOS == "windows" {
-		roots = append(roots, map[string]string{"label": "C:\\", "path": "C:\\"})
-	} else {
-		roots = append(roots, map[string]string{"label": "/", "path": "/"})
+	if s.allowSystem {
+		if runtime.GOOS == "windows" {
+			roots = append(roots, map[string]string{"label": "C:\\", "path": "C:\\"})
+		} else {
+			roots = append(roots, map[string]string{"label": "/", "path": "/"})
+		}
 	}
 	return roots
 }
@@ -58,6 +68,9 @@ func (s *Service) resolvePath(path string) (string, error) {
 			return filepath.Clean(s.defaultRoot), nil
 		}
 		if path == "" {
+			return filepath.Clean(s.defaultRoot), nil
+		}
+		if path == "/" && !s.allowSystem {
 			return filepath.Clean(s.defaultRoot), nil
 		}
 	}
@@ -72,7 +85,28 @@ func (s *Service) resolvePath(path string) (string, error) {
 	if isSensitivePath(abs) {
 		return "", fs.ErrPermission
 	}
+	if !s.allowSystem && !s.underAllowedRoot(abs) {
+		return "", fs.ErrPermission
+	}
 	return abs, nil
+}
+
+func (s *Service) underAllowedRoot(abs string) bool {
+	candidates := []string{s.defaultRoot, s.dataDir}
+	for _, root := range candidates {
+		if root == "" {
+			continue
+		}
+		rootAbs, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(rootAbs, abs)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // Block direct access to high-risk credential files while keeping admin FS browsing.

@@ -23,7 +23,18 @@ location / {
 func (s *Service) writeNginxVhost(site *models.WordPressSite) (string, error) {
 	confDir := filepath.Join(s.dataDir, "nginx", "vhosts")
 	_ = os.MkdirAll(confDir, 0755)
-	confPath := filepath.Join(confDir, site.Domain+".conf")
+	safeName := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '-', r == '_':
+			return r
+		default:
+			return '_'
+		}
+	}, strings.ToLower(strings.TrimSpace(site.Domain)))
+	if safeName == "" || safeName == "." || safeName == ".." {
+		safeName = "wordpress"
+	}
+	confPath := filepath.Join(confDir, safeName+".conf")
 	root := filepath.ToSlash(site.RootPath)
 	fastcgi := s.phpFastCGIBackend(site.PhpVersion)
 	serverNames := strings.Join(s.allServerNames(site), " ")

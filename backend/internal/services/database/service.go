@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/luuuunet/owpanel/internal/models"
@@ -181,10 +182,19 @@ func isMySQLType(t string) bool {
 }
 
 func (s *Service) Delete(id uint) error {
+	var inst models.DatabaseInstance
+	if err := s.db.First(&inst, id).Error; err != nil {
+		return err
+	}
 	var backups []models.DatabaseBackup
 	s.db.Where("database_id = ?", id).Find(&backups)
 	for _, b := range backups {
 		_ = s.DeleteBackup(id, b.ID)
+	}
+	if isMySQLType(inst.Type) {
+		if err := s.DeprovisionMySQL(inst.Name, inst.Username); err != nil {
+			return fmt.Errorf("删除面板记录前清理 MySQL 失败: %w", err)
+		}
 	}
 	return s.db.Delete(&models.DatabaseInstance{}, id).Error
 }

@@ -57,11 +57,18 @@ func (s *Service) sendLocal(msg outboundMessage) error {
 		return fmt.Errorf("本机 Postfix 发送需在 Linux 上运行")
 	}
 	from := strings.TrimSpace(msg.From)
-	to := strings.TrimSpace(msg.To)
+	from = sanitizeHeaderValue(from)
+	to := sanitizeHeaderValue(msg.To)
 	if from == "" || to == "" {
 		return fmt.Errorf("发件人或收件人为空")
 	}
-	subject := msg.Subject
+	if err := validateMailAddress(from); err != nil {
+		return err
+	}
+	if err := validateMailAddress(to); err != nil {
+		return err
+	}
+	subject := sanitizeHeaderValue(msg.Subject)
 	if subject == "" {
 		subject = "(no subject)"
 	}
@@ -72,7 +79,7 @@ func (s *Service) sendLocal(msg outboundMessage) error {
 	var buf bytes.Buffer
 	buf.WriteString("From: " + msg.fromHeader() + "\r\n")
 	buf.WriteString("To: " + to + "\r\n")
-	if rt := strings.TrimSpace(msg.ReplyTo); rt != "" {
+	if rt := sanitizeHeaderValue(msg.ReplyTo); rt != "" {
 		buf.WriteString("Reply-To: " + rt + "\r\n")
 	}
 	buf.WriteString("Subject: " + subject + "\r\n")
@@ -197,7 +204,7 @@ func smtpSendTLS(addr, host string, auth smtp.Auth, from, to string, body []byte
 }
 
 func buildMIMEBody(msg outboundMessage) []byte {
-	subject := msg.Subject
+	subject := sanitizeHeaderValue(msg.Subject)
 	if subject == "" {
 		subject = "(no subject)"
 	}
@@ -207,8 +214,8 @@ func buildMIMEBody(msg outboundMessage) []byte {
 	}
 	var buf bytes.Buffer
 	buf.WriteString("From: " + msg.fromHeader() + "\r\n")
-	buf.WriteString("To: " + msg.To + "\r\n")
-	if rt := strings.TrimSpace(msg.ReplyTo); rt != "" {
+	buf.WriteString("To: " + sanitizeHeaderValue(msg.To) + "\r\n")
+	if rt := sanitizeHeaderValue(msg.ReplyTo); rt != "" {
 		buf.WriteString("Reply-To: " + rt + "\r\n")
 	}
 	buf.WriteString("Subject: " + subject + "\r\n")

@@ -67,11 +67,15 @@ func (s *Service) SendTestMail(from, to, subject, body string) error {
 	if runtime.GOOS == "windows" {
 		return fmt.Errorf("Windows 不支持发送测试邮件")
 	}
-	from = strings.TrimSpace(from)
-	to = strings.TrimSpace(to)
-	if from == "" || to == "" {
-		return fmt.Errorf("发件人与收件人不能为空")
+	from = sanitizeHeaderValue(from)
+	to = sanitizeHeaderValue(to)
+	if err := validateMailAddress(from); err != nil {
+		return err
 	}
+	if err := validateMailAddress(to); err != nil {
+		return err
+	}
+	subject = sanitizeHeaderValue(subject)
 	if subject == "" {
 		subject = "OWPanel Mail Test"
 	}

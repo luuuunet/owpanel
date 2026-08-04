@@ -18,7 +18,7 @@ func (s *Service) writeApacheVhost(site *models.Website) (string, error) {
 	}
 	confDir := s.vhostDir("apache")
 	_ = os.MkdirAll(confDir, 0755)
-	confPath := filepath.Join(confDir, site.Domain+".conf")
+	confPath := filepath.Join(confDir, confFileName(site.Domain))
 	root := filepath.ToSlash(site.RootPath)
 
 	entries := s.allDomainEntries(site)
@@ -176,6 +176,6 @@ func (s *Service) apacheVirtualHost(site *models.Website, root string, port int,
 }
 
 func (s *Service) removeApacheVhost(domain string) {
-	confPath := filepath.Join(s.vhostDir("apache"), domain+".conf")
+	confPath := filepath.Join(s.vhostDir("apache"), confFileName(domain))
 	_ = os.Remove(confPath)
 }

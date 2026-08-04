@@ -14,6 +14,11 @@ import (
 	"github.com/luuuunet/owpanel/internal/services/filemgr"
 )
 
+func (s *Server) fm(c *gin.Context) *filemgr.Service {
+	role, _ := c.Get("role")
+	return s.filemgr.ForAdmin(role == "admin")
+}
+
 func (s *Server) registerFileRoutes(authorized *gin.RouterGroup) {
 	authorized.GET("/files/trash", s.handleListTrash)
 	authorized.POST("/files/trash/empty", s.handleEmptyTrash)
@@ -51,7 +56,7 @@ func (s *Server) registerFileRoutes(authorized *gin.RouterGroup) {
 
 func (s *Server) handleListFiles(c *gin.Context) {
 	dir := c.Query("path")
-	entries, err := s.filemgr.List(dir)
+	entries, err := s.fm(c).List(dir)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -61,14 +66,14 @@ func (s *Server) handleListFiles(c *gin.Context) {
 
 func (s *Server) handleFileRoots(c *gin.Context) {
 	response.OK(c, gin.H{
-		"default_root": s.filemgr.DefaultRoot(),
-		"roots":        s.filemgr.Roots(),
+		"default_root": s.fm(c).DefaultRoot(),
+		"roots":        s.fm(c).Roots(),
 	})
 }
 
 func (s *Server) handleFileInfo(c *gin.Context) {
 	path := c.Query("path")
-	info, err := s.filemgr.Stat(path)
+	info, err := s.fm(c).Stat(path)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -78,7 +83,7 @@ func (s *Server) handleFileInfo(c *gin.Context) {
 
 func (s *Server) handleReadFile(c *gin.Context) {
 	path := c.Query("path")
-	info, err := s.filemgr.Stat(path)
+	info, err := s.fm(c).Stat(path)
 	if err != nil {
 		response.Error(c, 404, err.Error())
 		return
@@ -87,7 +92,7 @@ func (s *Server) handleReadFile(c *gin.Context) {
 		response.Error(c, 400, "path is a directory")
 		return
 	}
-	content, err := s.filemgr.Read(path)
+	content, err := s.fm(c).Read(path)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -109,7 +114,7 @@ func (s *Server) handleWriteFile(c *gin.Context) {
 		response.Error(c, 403, err.Error())
 		return
 	}
-	if err := s.filemgr.Write(req.Path, content); err != nil {
+	if err := s.fm(c).Write(req.Path, content); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -121,7 +126,7 @@ func (s *Server) handleDeleteFile(c *gin.Context) {
 	path := c.Query("path")
 	username, _ := c.Get("username")
 	user, _ := username.(string)
-	if _, err := s.filemgr.MoveToTrash(path, c.GetUint("user_id"), user); err != nil {
+	if _, err := s.fm(c).MoveToTrash(path, c.GetUint("user_id"), user); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -142,7 +147,7 @@ func (s *Server) handleDeleteFilesBatch(c *gin.Context) {
 	}
 	username, _ := c.Get("username")
 	user, _ := username.(string)
-	result, err := s.filemgr.MoveManyToTrash(req.Paths, c.GetUint("user_id"), user)
+	result, err := s.fm(c).MoveManyToTrash(req.Paths, c.GetUint("user_id"), user)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -155,7 +160,7 @@ func (s *Server) handleDeleteFilesBatch(c *gin.Context) {
 }
 
 func (s *Server) handleListTrash(c *gin.Context) {
-	items, err := s.filemgr.ListTrash()
+	items, err := s.fm(c).ListTrash()
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -165,7 +170,7 @@ func (s *Server) handleListTrash(c *gin.Context) {
 
 func (s *Server) handleRestoreTrash(c *gin.Context) {
 	id := c.Param("id")
-	path, err := s.filemgr.RestoreTrash(id)
+	path, err := s.fm(c).RestoreTrash(id)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -175,7 +180,7 @@ func (s *Server) handleRestoreTrash(c *gin.Context) {
 
 func (s *Server) handleDeleteTrashPermanent(c *gin.Context) {
 	id := c.Param("id")
-	size, err := s.filemgr.DeleteTrashPermanent(id)
+	size, err := s.fm(c).DeleteTrashPermanent(id)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -185,7 +190,7 @@ func (s *Server) handleDeleteTrashPermanent(c *gin.Context) {
 }
 
 func (s *Server) handleEmptyTrash(c *gin.Context) {
-	size, err := s.filemgr.EmptyTrash()
+	size, err := s.fm(c).EmptyTrash()
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -202,7 +207,7 @@ func (s *Server) handleMkdir(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	if err := s.filemgr.Mkdir(req.Path); err != nil {
+	if err := s.fm(c).Mkdir(req.Path); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -225,7 +230,7 @@ func (s *Server) handleCreateFile(c *gin.Context) {
 			return
 		}
 	}
-	if err := s.filemgr.CreateFile(req.Path, []byte(req.Content), req.IsDir); err != nil {
+	if err := s.fm(c).CreateFile(req.Path, []byte(req.Content), req.IsDir); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -244,7 +249,7 @@ func (s *Server) handleRenameFile(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	if err := s.filemgr.Rename(req.Path, req.NewName); err != nil {
+	if err := s.fm(c).Rename(req.Path, req.NewName); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -262,7 +267,7 @@ func (s *Server) handleFilePermissions(c *gin.Context) {
 		return
 	}
 	if req.Recursive {
-		stats, err := s.filemgr.ChmodRecursive(req.Path, req.Mode)
+		stats, err := s.fm(c).ChmodRecursive(req.Path, req.Mode)
 		if err != nil {
 			response.Error(c, 500, err.Error())
 			return
@@ -270,7 +275,7 @@ func (s *Server) handleFilePermissions(c *gin.Context) {
 		response.OK(c, stats)
 		return
 	}
-	if err := s.filemgr.Chmod(req.Path, req.Mode); err != nil {
+	if err := s.fm(c).Chmod(req.Path, req.Mode); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -292,7 +297,7 @@ func (s *Server) handleUploadFile(c *gin.Context) {
 		response.Error(c, 403, err.Error())
 		return
 	}
-	target, err := s.filemgr.Upload(dir, file, header.Filename)
+	target, err := s.fm(c).Upload(dir, file, header.Filename)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -317,7 +322,7 @@ func (s *Server) handleUploadInit(c *gin.Context) {
 		response.Error(c, 403, err.Error())
 		return
 	}
-	st, err := s.filemgr.InitChunkUpload(req.Path, req.Filename, req.Size, req.ChunkSize, req.UploadID)
+	st, err := s.fm(c).InitChunkUpload(req.Path, req.Filename, req.Size, req.ChunkSize, req.UploadID)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -331,7 +336,7 @@ func (s *Server) handleUploadStatus(c *gin.Context) {
 		response.Error(c, 400, "upload_id required")
 		return
 	}
-	st, err := s.filemgr.GetChunkUploadStatus(id)
+	st, err := s.fm(c).GetChunkUploadStatus(id)
 	if err != nil {
 		response.Error(c, 404, err.Error())
 		return
@@ -359,7 +364,7 @@ func (s *Server) handleUploadChunk(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-	st, err := s.filemgr.PutChunk(id, index, file, header.Size)
+	st, err := s.fm(c).PutChunk(id, index, file, header.Size)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -375,7 +380,7 @@ func (s *Server) handleUploadComplete(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	st, err := s.filemgr.GetChunkUploadStatus(req.UploadID)
+	st, err := s.fm(c).GetChunkUploadStatus(req.UploadID)
 	if err != nil {
 		response.Error(c, 404, err.Error())
 		return
@@ -384,7 +389,7 @@ func (s *Server) handleUploadComplete(c *gin.Context) {
 		response.Error(c, 403, err.Error())
 		return
 	}
-	target, err := s.filemgr.CompleteChunkUpload(req.UploadID)
+	target, err := s.fm(c).CompleteChunkUpload(req.UploadID)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -395,7 +400,7 @@ func (s *Server) handleUploadComplete(c *gin.Context) {
 
 func (s *Server) handleUploadCancel(c *gin.Context) {
 	id := c.Param("id")
-	if err := s.filemgr.CancelChunkUpload(id); err != nil {
+	if err := s.fm(c).CancelChunkUpload(id); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -412,7 +417,7 @@ func (s *Server) handleDownloadFromURL(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	result, err := s.filemgr.DownloadFromURL(req.Path, req.URL, req.Filename)
+	result, err := s.fm(c).DownloadFromURL(req.Path, req.URL, req.Filename)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -436,7 +441,7 @@ func (s *Server) handleCompressFiles(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	result, err := s.filemgr.Compress(req.Paths, req.Format, req.Dest)
+	result, err := s.fm(c).Compress(req.Paths, req.Format, req.Dest)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -453,7 +458,7 @@ func (s *Server) handleExtractFile(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	if err := s.filemgr.Extract(req.Path, req.DestDir); err != nil {
+	if err := s.fm(c).Extract(req.Path, req.DestDir); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -462,7 +467,7 @@ func (s *Server) handleExtractFile(c *gin.Context) {
 
 func (s *Server) handleDownloadFile(c *gin.Context) {
 	path := c.Query("path")
-	info, err := s.filemgr.Stat(path)
+	info, err := s.fm(c).Stat(path)
 	if err != nil {
 		response.Error(c, 404, err.Error())
 		return
@@ -487,7 +492,7 @@ func (s *Server) handleDownloadBatch(c *gin.Context) {
 		return
 	}
 	dest := filepath.Join(os.TempDir(), fmt.Sprintf("owpanel-dl-%d.zip", time.Now().UnixNano()))
-	result, err := s.filemgr.Compress(req.Paths, "zip", dest)
+	result, err := s.fm(c).Compress(req.Paths, "zip", dest)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -498,7 +503,7 @@ func (s *Server) handleDownloadBatch(c *gin.Context) {
 
 func (s *Server) handleFileTreeSize(c *gin.Context) {
 	path := c.Query("path")
-	size, err := s.filemgr.TreeSize(path)
+	size, err := s.fm(c).TreeSize(path)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
@@ -509,7 +514,7 @@ func (s *Server) handleFileTreeSize(c *gin.Context) {
 func (s *Server) handleSearchFiles(c *gin.Context) {
 	dir := c.Query("path")
 	query := c.Query("q")
-	entries, err := s.filemgr.SearchNames(dir, query, 200)
+	entries, err := s.fm(c).SearchNames(dir, query, 200)
 	if err != nil {
 		response.Error(c, 400, err.Error())
 		return
@@ -526,7 +531,7 @@ func (s *Server) handleCopyFiles(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	if err := s.filemgr.CopyItems(req.Paths, req.Dest); err != nil {
+	if err := s.fm(c).CopyItems(req.Paths, req.Dest); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -542,7 +547,7 @@ func (s *Server) handleMoveFiles(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	if err := s.filemgr.MoveItems(req.Paths, req.Dest); err != nil {
+	if err := s.fm(c).MoveItems(req.Paths, req.Dest); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
@@ -557,7 +562,7 @@ func (s *Server) handleDuplicateFile(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	newPath, err := s.filemgr.Duplicate(req.Path)
+	newPath, err := s.fm(c).Duplicate(req.Path)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return

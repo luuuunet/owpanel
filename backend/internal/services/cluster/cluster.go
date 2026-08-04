@@ -38,7 +38,7 @@ func (s *Service) ensureAgentToken() {
 	s.settings.EnsureKeys("cluster_agent_token")
 	all, _ := s.settings.GetAll()
 	if strings.TrimSpace(all["cluster_agent_token"]) == "" {
-		_ = s.settings.Update(map[string]string{"cluster_agent_token": randomToken(24)})
+		_ = s.settings.Set("cluster_agent_token", randomToken(24))
 	}
 }
 
@@ -59,7 +59,7 @@ func (s *Service) AgentToken() (string, error) {
 
 func (s *Service) RegenerateAgentToken() (string, error) {
 	tok := randomToken(24)
-	if err := s.settings.Update(map[string]string{"cluster_agent_token": tok}); err != nil {
+	if err := s.settings.Set("cluster_agent_token", tok); err != nil {
 		return "", err
 	}
 	return tok, nil

@@ -381,6 +381,32 @@ func CharsetFromInput(charset string) string {
 	return cs
 }
 
+// DeprovisionMySQL drops the database and related local/remote users on the server.
+func (s *Service) DeprovisionMySQL(name, username string) error {
+	name = strings.TrimSpace(name)
+	username = strings.TrimSpace(username)
+	if name == "" {
+		return fmt.Errorf("数据库名为空")
+	}
+	if username == "" {
+		username = name
+	}
+	escDB := mysqlEscapeSQL(name)
+	escUser := mysqlEscapeSQL(username)
+	sql := fmt.Sprintf(
+		"DROP DATABASE IF EXISTS `%s`; "+
+			"DROP USER IF EXISTS '%s'@'localhost'; "+
+			"DROP USER IF EXISTS '%s'@'127.0.0.1'; "+
+			"DROP USER IF EXISTS '%s'@'%%'; FLUSH PRIVILEGES;",
+		escDB, escUser, escUser, escUser,
+	)
+	out, err := s.mysqlRootExec("-e", sql)
+	if err != nil {
+		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 // ProvisionMySQL 在 MySQL/MariaDB 上创建真实数据库与用户
 func (s *Service) ProvisionMySQL(name, username, password string) error {
 	return s.ProvisionMySQLWith(ProvisionMySQLOptions{

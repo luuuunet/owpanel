@@ -107,7 +107,9 @@ func (s *Service) AddDomains(siteID uint, text string) ([]models.WebsiteAlias, e
 		for _, a := range added {
 			entries = append(entries, domainEntry{Host: a.Domain, Port: a.Port})
 		}
-		_ = s.autoDNS(site.Domain, entries, siteID)
+		if err := s.autoDNS(site.Domain, entries, siteID); err != nil {
+			return added, fmt.Errorf("域名已添加，但自动 DNS 失败: %w", err)
+		}
 	}
 	// Cloudflare Full (strict) requires origin cert SAN to cover every hostname.
 	if site.SSL {

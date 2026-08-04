@@ -28,7 +28,7 @@ func (s *Service) writeNginxVhost(site *models.Website) (string, error) {
 	}
 	confDir := s.vhostDir("nginx")
 	_ = os.MkdirAll(confDir, 0755)
-	confPath := filepath.Join(confDir, site.Domain+".conf")
+	confPath := filepath.Join(confDir, confFileName(site.Domain))
 	root := filepath.ToSlash(site.RootPath)
 
 	entries := s.allDomainEntries(site)
@@ -266,14 +266,14 @@ func (s *Service) sslServerBlock(site *models.Website, root, primary string, fea
 }
 
 func (s *Service) removeNginxVhost(domain string) {
-	confPath := filepath.Join(s.vhostDir("nginx"), domain+".conf")
+	confPath := filepath.Join(s.vhostDir("nginx"), confFileName(domain))
 	_ = os.Remove(confPath)
 }
 
 func (s *Service) writeStoppedVhost(site *models.Website, webServer string) (string, error) {
 	confDir := s.vhostDir(webServer)
 	_ = os.MkdirAll(confDir, 0755)
-	confPath := filepath.Join(confDir, site.Domain+".conf")
+	confPath := filepath.Join(confDir, confFileName(site.Domain))
 	if webServer == "apache" {
 		content := fmt.Sprintf(`# Site stopped: %s
 <VirtualHost *:%d>
@@ -371,9 +371,9 @@ func (s *Service) applyVhostOpts(site *models.Website, force bool) error {
 			ws = s.activeWebServer()
 		}
 		if ws == "apache" {
-			confPath = filepath.Join(s.vhostDir("apache"), site.Domain+".conf")
+			confPath = filepath.Join(s.vhostDir("apache"), confFileName(site.Domain))
 		} else {
-			confPath = filepath.Join(s.vhostDir("nginx"), site.Domain+".conf")
+			confPath = filepath.Join(s.vhostDir("nginx"), confFileName(site.Domain))
 		}
 	}
 	prev, _ := os.ReadFile(confPath)

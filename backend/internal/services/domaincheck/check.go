@@ -2,11 +2,75 @@ package domaincheck
 
 import (
 	"fmt"
+	"net"
+	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/luuuunet/owpanel/internal/models"
 	"gorm.io/gorm"
 )
+
+var hostnameLabelRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// ValidateHostname rejects values unsafe for nginx server_name / conf filenames.
+func ValidateHostname(raw string) error {
+	host := HostOnly(raw)
+	if host == "" {
+		return fmt.Errorf("域名为空")
+	}
+	if len(host) > 253 {
+		return fmt.Errorf("域名过长")
+	}
+	if strings.ContainsAny(host, " \t\r\n;\\\"'`{}()$|") || strings.Contains(host, "..") {
+		return fmt.Errorf("域名包含非法字符: %s", raw)
+	}
+	if strings.ContainsAny(host, "/\\") {
+		return fmt.Errorf("域名不能包含路径分隔符")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return nil
+	}
+	if host == "localhost" {
+		return nil
+	}
+	for _, r := range host {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("域名包含非法字符")
+		}
+	}
+	labels := strings.Split(host, ".")
+	if len(labels) == 0 {
+		return fmt.Errorf("无效域名")
+	}
+	for _, label := range labels {
+		if label == "*" {
+			continue // allow wildcard DNS-style labels only as a single *
+		}
+		if label == "" || !hostnameLabelRe.MatchString(label) {
+			// allow underscore for some internal names, but still block injection chars above
+			if strings.ContainsAny(label, "_") {
+				for _, c := range label {
+					if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+						return fmt.Errorf("无效域名标签: %s", label)
+					}
+				}
+				continue
+			}
+			return fmt.Errorf("无效域名标签: %s", label)
+		}
+	}
+	return nil
+}
+
+func AssertValidHostnames(domains []string) error {
+	for _, d := range domains {
+		if err := ValidateHostname(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 type Scope struct {
 	IgnoreWebsiteID         uint
@@ -143,6 +207,9 @@ func CheckList(db *gorm.DB, domains []string, scope Scope) []Conflict {
 }
 
 func AssertAvailable(db *gorm.DB, domains []string, scope Scope) error {
+	if err := AssertValidHostnames(domains); err != nil {
+		return err
+	}
 	conflicts := CheckList(db, domains, scope)
 	if len(conflicts) == 0 {
 		return nil

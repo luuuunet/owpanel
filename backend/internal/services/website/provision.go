@@ -192,7 +192,10 @@ func (s *Service) Create(req *CreateRequest) (*CreateResult, error) {
 	}
 
 	if req.DnsMode == "auto" {
-		_ = s.autoDNS(site.Domain, aliases, site.ID)
+		if err := s.autoDNS(site.Domain, aliases, site.ID); err != nil {
+			result.Site = site
+			return result, fmt.Errorf("网站已创建，但自动 DNS 失败: %w", err)
+		}
 	}
 
 	result.Site = site
