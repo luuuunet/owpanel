@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api, { resolveApiError, SITE_CREATE_TIMEOUT } from '@/api'
 import { formatBytes } from '@/utils/formatBytes'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -10,6 +10,7 @@ import SiteModifyDialog from '@/components/SiteModifyDialog.vue'
 import SiteBackupDialog from '@/components/SiteBackupDialog.vue'
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 
 const projects = ref<any[]>([])
@@ -17,6 +18,15 @@ const options = ref<any>({})
 const webserver = ref<any>({ active: 'nginx', servers: [] })
 const projectTab = ref('php')
 const searchText = ref('')
+
+function applyRouteSearch() {
+  const q = String(route.query.q || route.query.search || '').trim()
+  const type = String(route.query.type || '').toLowerCase()
+  if (q) searchText.value = q
+  if (type === 'php' || type === 'node' || type === 'java') {
+    projectTab.value = type
+  }
+}
 const selectedRows = ref<any[]>([])
 const switchingWebServer = ref(false)
 const cacheGlobalEnabled = ref(false)
@@ -753,7 +763,16 @@ function backupTagType(row: any) {
   return 'warning'
 }
 
+watch(
+  () => [route.query.q, route.query.search, route.query.type],
+  () => {
+    applyRouteSearch()
+    loadProjects()
+  },
+)
+
 onMounted(() => {
+  applyRouteSearch()
   load()
   loadOssStorages()
   bindActionsColLayoutObserver()

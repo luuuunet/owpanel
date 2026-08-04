@@ -43,7 +43,25 @@ const tab = ref(route.query.tab === 'installed' ? 'installed' : 'store')
 const storeApps = ref<any[]>([])
 const installedApps = ref<any[]>([])
 const category = ref(ALL)
-const keyword = ref('')
+const keyword = ref(String(route.query.q || '').trim())
+
+const filteredInstalled = computed(() => {
+  const q = keyword.value.trim().toLowerCase()
+  if (!q) return installedApps.value
+  const nq = q.replace(/[\s._-]/g, '')
+  return installedApps.value.filter((a) => {
+    const name = String(a.name || '').toLowerCase()
+    const key = String(a.key || '').toLowerCase()
+    const domain = String(a.bind_domain || '').toLowerCase()
+    return (
+      name.includes(q) ||
+      key.includes(q) ||
+      domain.includes(q) ||
+      name.replace(/[\s._-]/g, '').includes(nq) ||
+      key.replace(/[\s._-]/g, '').includes(nq)
+    )
+  })
+})
 const loading = ref(false)
 const storeLoadFailed = ref(false)
 const refreshingVersions = ref(false)
@@ -126,7 +144,19 @@ function nameFor(app: any) {
   return displayAppName(app, t)
 }
 
-watch(tab, (v) => router.replace({ query: { tab: v } }))
+watch(tab, (v) => {
+  const q = keyword.value.trim()
+  router.replace({ query: { tab: v, ...(q ? { q } : {}) } })
+})
+
+watch(
+  () => [route.query.tab, route.query.q],
+  () => {
+    tab.value = route.query.tab === 'installed' ? 'installed' : 'store'
+    const q = String(route.query.q || '').trim()
+    if (q !== keyword.value) keyword.value = q
+  },
+)
 
 function catLabel(c: string) {
   return c === ALL ? t('software.allCategory') : categoryLabel(c, t)
@@ -475,7 +505,7 @@ onMounted(loadAll)
       </el-tab-pane>
 
       <el-tab-pane :label="t('software.installedTab')" name="installed">
-        <el-table :data="installedApps" stripe v-loading="loading">
+        <el-table :data="filteredInstalled" stripe v-loading="loading">
           <el-table-column :label="t('common.name')" width="200">
             <template #default="{ row }">
               <div class="table-app-name">

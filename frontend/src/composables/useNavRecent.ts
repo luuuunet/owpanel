@@ -1,14 +1,22 @@
 import { ref } from 'vue'
 
 const STORAGE_KEY = 'owpanel-nav-recent'
-const MAX_RECENT = 8
+const MAX_RECENT = 10
 
 export interface NavRecentEntry {
+  id?: string
   path: string
   titleKey: string
   groupTitleKey: string
   icon: string
+  query?: Record<string, string>
   visitedAt: number
+}
+
+function recentKey(entry: Pick<NavRecentEntry, 'path' | 'query' | 'id'>) {
+  if (entry.id) return entry.id
+  const q = entry.query ? JSON.stringify(entry.query) : ''
+  return `${entry.path}?${q}`
 }
 
 function readRecent(): NavRecentEntry[] {
@@ -31,7 +39,8 @@ const recentList = ref<NavRecentEntry[]>(readRecent())
 export function useNavRecent() {
   function recordVisit(entry: Omit<NavRecentEntry, 'visitedAt'>) {
     const next: NavRecentEntry = { ...entry, visitedAt: Date.now() }
-    const filtered = recentList.value.filter((r) => r.path !== entry.path)
+    const key = recentKey(next)
+    const filtered = recentList.value.filter((r) => recentKey(r) !== key)
     recentList.value = [next, ...filtered].slice(0, MAX_RECENT)
     writeRecent(recentList.value)
   }

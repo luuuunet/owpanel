@@ -7,23 +7,45 @@ import AppLogo from '@/components/AppLogo.vue'
 import { menuGroups, canAccessMenuItem, menuGroupForPath, type MenuGroup, type MenuItem } from '@/config/menu'
 import { useExtensionsStore } from '@/stores/extensions'
 import { useNavRecent } from '@/composables/useNavRecent'
+import {
+  buildTabHits,
+  pageHitFromMenu,
+  rankQuickSearch,
+  useQuickSearch,
+  type QuickSearchHit,
+} from '@/composables/useQuickSearch'
 import * as Icons from '@element-plus/icons-vue'
 import { ArrowDown, CircleClose, Search, SwitchButton } from '@element-plus/icons-vue'
 
-interface SearchHit {
-  path: string
-  titleKey: string
-  groupTitleKey: string
-  icon: string
-  externalUrl?: string
+const PAGE_KEYWORDS: Record<string, string[]> = {
+  '/websites': ['网站', '站点', '域名', 'site', 'website', '建站'],
+  '/databases': ['数据库', 'mysql', 'postgres', 'mongodb', 'redis', 'maria'],
+  '/ssl': ['证书', 'https', 'letsencrypt', 'acme', 'ssl'],
+  '/docker': ['容器', 'container', '镜像'],
+  '/compose': ['编排', 'stack', '一键部署'],
+  '/ftp': ['ftp', 'sftp', '文件传输'],
+  '/mail': ['邮件', '邮箱', 'smtp', 'postfix', 'webmail'],
+  '/protection': ['防火墙', 'waf', 'cdn', '缓存', '安全', 'nginx'],
+  '/cron': ['计划任务', 'crontab', '定时'],
+  '/backup': ['备份', '快照', 'backup'],
+  '/files': ['文件管理', 'file manager'],
+  '/dns': ['dns', '解析', 'cloudflare'],
+  '/wordpress': ['wordpress', 'wp', '建站'],
+  '/terminal': ['ssh', '终端', '堡垒机', 'shell'],
+  '/php': ['php', 'fpm'],
+  '/software': ['软件', '应用商店', '已安装', 'app store'],
+  '/toolbox': ['工具箱', '诊断', '测速', 'ping'],
+  '/settings': ['面板设置', '配置', 'totp', '二步验证'],
+  '/infra-hub': ['云原生', 'ai', 'llmops', '基础设施'],
 }
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const extStore = useExtensionsStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { recentList, recordVisit, clearRecent } = useNavRecent()
+const { resourceHits, loading: indexLoading, ensureResourceIndex } = useQuickSearch()
 
 const emit = defineEmits<{ logout: [] }>()
 
@@ -37,6 +59,7 @@ let collapseTimer: ReturnType<typeof setTimeout> | null = null
 
 function menuItemLabel(titleKey: string) {
   if (titleKey.startsWith('@ext:')) return titleKey.slice(5)
+  if (titleKey.startsWith('@raw:')) return titleKey.slice(5)
   return t(titleKey)
 }
 
@@ -75,7 +98,7 @@ const visibleGroups = computed(() => {
   return [...base, ...ext]
 })
 
-const allMenuHits = computed<SearchHit[]>(() =>
+const allMenuHits = computed(() =>
   visibleGroups.value.flatMap((group) =>
     group.items.map((item) => ({
       path: item.path,
@@ -86,6 +109,33 @@ const allMenuHits = computed<SearchHit[]>(() =>
     }))
   )
 )
+
+function canAccessPath(path: string) {
+  return allMenuHits.value.some((h) => h.path === path)
+}
+
+const pageSearchHits = computed<QuickSearchHit[]>(() =>
+  allMenuHits.value.map((hit) =>
+    pageHitFromMenu({
+      path: hit.path,
+      title: menuItemLabel(hit.titleKey),
+      category: menuItemLabel(hit.groupTitleKey),
+      icon: hit.icon,
+      titleKey: hit.titleKey,
+      groupTitleKey: hit.groupTitleKey,
+      externalUrl: hit.externalUrl,
+      keywords: PAGE_KEYWORDS[hit.path] || [],
+    })
+  )
+)
+
+const tabSearchHits = computed(() => buildTabHits(canAccessPath, t))
+
+const searchableHits = computed(() => [
+  ...pageSearchHits.value,
+  ...tabSearchHits.value,
+  ...resourceHits.value,
+])
 
 function groupKey(group: MenuGroup) {
   return group.titleKey
@@ -112,7 +162,14 @@ watch(
   (path) => {
     syncOpenGroupFromRoute()
     const hit = findHit(path)
-    if (hit) recordVisit(hit)
+    if (hit) {
+      recordVisit({
+        path: hit.path,
+        titleKey: hit.titleKey,
+        groupTitleKey: hit.groupTitleKey,
+        icon: hit.icon,
+      })
+    }
   },
   { immediate: true }
 )
@@ -121,7 +178,13 @@ function itemMatchesQuery(item: MenuItem, group: MenuGroup, q: string) {
   const label = menuItemLabel(item.titleKey).toLowerCase()
   const groupLabel = menuItemLabel(group.titleKey).toLowerCase()
   const path = item.path.toLowerCase()
-  return label.includes(q) || groupLabel.includes(q) || path.includes(q.replace(/^\//, ''))
+  const kw = (PAGE_KEYWORDS[item.path] || []).join(' ').toLowerCase()
+  return (
+    label.includes(q) ||
+    groupLabel.includes(q) ||
+    path.includes(q.replace(/^\//, '')) ||
+    kw.includes(q)
+  )
 }
 
 const filteredGroups = computed(() => {
@@ -135,31 +198,45 @@ const filteredGroups = computed(() => {
     .filter((group) => group.items.length > 0)
 })
 
-const searchResults = computed<SearchHit[]>(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return []
-  return allMenuHits.value.filter((hit) => {
-    const group = visibleGroups.value.find((g) => g.titleKey === hit.groupTitleKey)
-    const item = group?.items.find((i) => i.path === hit.path)
-    return item && group && itemMatchesQuery(item, group, q)
-  })
-})
+const searchResults = computed(() => rankQuickSearch(searchableHits.value, searchQuery.value))
 
-const recentHits = computed(() =>
-  recentList.value.filter((r) => allMenuHits.value.some((h) => h.path === r.path))
+const recentHits = computed<QuickSearchHit[]>(() =>
+  recentList.value
+    .filter((r) => canAccessPath(r.path) || allMenuHits.value.some((h) => h.path === r.path))
+    .map((r) => ({
+      id: r.id || `recent:${r.path}:${JSON.stringify(r.query || {})}`,
+      kind: 'page' as const,
+      path: r.path,
+      query: r.query,
+      title: menuItemLabel(r.titleKey),
+      category: menuItemLabel(r.groupTitleKey),
+      icon: r.icon,
+      titleKey: r.titleKey,
+      groupTitleKey: r.groupTitleKey,
+    }))
 )
 
 const showSearchPanel = computed(
   () => expanded.value && (searchFocused.value || searchQuery.value.trim() !== '')
 )
 
-const panelItems = computed<SearchHit[]>(() => {
+const panelItems = computed<QuickSearchHit[]>(() => {
   if (searchQuery.value.trim()) return searchResults.value
   return recentHits.value
 })
 
 watch([searchQuery, panelItems], () => {
   selectedIndex.value = 0
+})
+
+watch(searchFocused, (focused) => {
+  if (focused) {
+    void ensureResourceIndex(canAccessPath, t, locale.value)
+  }
+})
+
+watch(searchQuery, (q) => {
+  if (q.trim()) void ensureResourceIndex(canAccessPath, t, locale.value)
 })
 
 function getIcon(name: string) {
@@ -246,16 +323,34 @@ function closeSearch() {
   searchInputRef.value?.blur()
 }
 
-function navigateTo(hit: SearchHit) {
+function navigateTo(hit: QuickSearchHit) {
+  const recentPayload = {
+    id: hit.id,
+    path: hit.path,
+    titleKey: hit.titleKey,
+    groupTitleKey: hit.groupTitleKey,
+    icon: hit.icon,
+    query: hit.query,
+  }
   if (hit.externalUrl) {
-    recordVisit(hit)
+    recordVisit(recentPayload)
     openExternal(hit.externalUrl)
     closeSearch()
     return
   }
-  recordVisit(hit)
-  router.push(hit.path)
+  recordVisit(recentPayload)
+  router.push({ path: hit.path, query: hit.query })
   closeSearch()
+}
+
+function hitKey(hit: QuickSearchHit) {
+  return hit.id
+}
+
+function isHitCurrent(hit: QuickSearchHit) {
+  if (route.path !== hit.path) return false
+  if (!hit.query) return true
+  return Object.entries(hit.query).every(([k, v]) => String(route.query[k] || '') === String(v))
 }
 
 function onSearchFocus() {
@@ -353,10 +448,13 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- 搜索面板：最近访问 / 搜索结果 -->
+      <!-- 搜索面板：最近访问 / 搜索结果（含站点、已装软件等资源） -->
       <div v-if="showSearchPanel" class="cf-search-panel">
         <div class="cf-search-panel-head">
-          <span>{{ searchQuery.trim() ? menuItemLabel('nav.results') : menuItemLabel('nav.recent') }}</span>
+          <span>
+            {{ searchQuery.trim() ? menuItemLabel('nav.results') : menuItemLabel('nav.recent') }}
+            <small v-if="indexLoading" class="cf-search-indexing">{{ menuItemLabel('nav.indexing') }}</small>
+          </span>
           <button
             v-if="!searchQuery.trim() && recentHits.length"
             type="button"
@@ -370,22 +468,29 @@ onUnmounted(() => {
         <div v-if="panelItems.length" class="cf-search-list">
           <button
             v-for="(hit, idx) in panelItems"
-            :key="hit.path"
+            :key="hitKey(hit)"
             type="button"
             class="cf-search-hit"
-            :class="{ active: idx === selectedIndex, current: route.path === hit.path }"
+            :class="{ active: idx === selectedIndex, current: isHitCurrent(hit) }"
             @mousedown.prevent
             @click="navigateTo(hit)"
             @mouseenter="selectedIndex = idx"
           >
             <el-icon class="cf-search-hit-icon"><component :is="getIcon(hit.icon)" /></el-icon>
             <span class="cf-search-hit-main">
-              <span class="cf-search-hit-title">{{ menuItemLabel(hit.titleKey) }}</span>
-              <span class="cf-search-hit-group">{{ menuItemLabel(hit.groupTitleKey) }}</span>
+              <span class="cf-search-hit-title">{{ hit.title }}</span>
+              <span class="cf-search-hit-group">
+                <span class="cf-search-hit-cat">{{ hit.category }}</span>
+                <span v-if="hit.subtitle" class="cf-search-hit-sub">{{ hit.subtitle }}</span>
+              </span>
             </span>
           </button>
         </div>
-        <div v-else class="cf-empty">{{ searchQuery.trim() ? menuItemLabel('nav.noResults') : menuItemLabel('nav.noRecent') }}</div>
+        <div v-else class="cf-empty">
+          {{ indexLoading && searchQuery.trim()
+            ? menuItemLabel('nav.indexing')
+            : (searchQuery.trim() ? menuItemLabel('nav.noResults') : menuItemLabel('nav.noRecent')) }}
+        </div>
         <p class="cf-search-hint">{{ menuItemLabel('nav.searchHint') }}</p>
       </div>
 
@@ -740,6 +845,24 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.cf-search-indexing {
+  margin-left: 6px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.cf-search-hit-cat {
+  font-weight: 600;
+}
+
+.cf-search-hit-sub {
+  opacity: 0.85;
+}
+
+.cf-search-hit-sub::before {
+  content: ' · ';
 }
 
 .cf-search-hit-group {

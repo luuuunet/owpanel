@@ -6,7 +6,11 @@ import api from '@/api'
 import { categoryLabel } from '@/locales'
 import SoftwareIcon from '@/components/SoftwareIcon.vue'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Bell, Refresh, Timer, Promotion, Share, FolderOpened, Lock, Document, Box, Histogram, Cpu, Coin, Platform, DataAnalysis, CircleCheck, Upload } from '@element-plus/icons-vue'
+import {
+  ArrowRight, Bell, Refresh, Timer, Promotion, Share, FolderOpened, Lock, Document, Box,
+  Histogram, Cpu, Coin, Platform, DataAnalysis, CircleCheck, Upload, Tools, Monitor,
+  MagicStick, WarningFilled,
+} from '@element-plus/icons-vue'
 import { cfTheme } from '@/config/theme'
 import { useAuthStore } from '@/stores/auth'
 
@@ -17,7 +21,11 @@ const auth = useAuthStore()
 const isAdmin = computed(() => !auth.user?.role || auth.user.role === 'admin')
 
 const loading = ref(false)
-const tab = ref(typeof localStorage !== 'undefined' && !localStorage.getItem('autoOpsGuideSeen') ? 'guide' : 'overview')
+const tab = ref('overview')
+const hubFilter = ref('all')
+const showGuideBanner = ref(
+  typeof localStorage !== 'undefined' && !localStorage.getItem('autoOpsGuideSeen'),
+)
 const status = ref<any>(null)
 const overview = ref<any>(null)
 const events = ref<any[]>([])
@@ -63,23 +71,154 @@ const scanningAll = ref(false)
 
 const watches = computed(() => status.value?.watches || [])
 const websiteAuditItems = computed(() => websiteAudits.value?.items || [])
-const installedCount = computed(() => watches.value.length)
+
+const hubCategories = computed(() => [
+  { key: 'all', label: t('autoOps.catAll'), icon: MagicStick },
+  { key: 'site', label: t('autoOps.catSite'), icon: Monitor },
+  { key: 'dev', label: t('autoOps.catDev'), icon: Promotion },
+  { key: 'test', label: t('autoOps.catTest'), icon: DataAnalysis },
+  { key: 'storage', label: t('autoOps.catStorage'), icon: FolderOpened },
+  { key: 'security', label: t('autoOps.catSecurity'), icon: Lock },
+  { key: 'ops', label: t('autoOps.catOps'), icon: Tools },
+  { key: 'cloud', label: t('autoOps.catCloud'), icon: Share },
+])
+
+const scenarios = computed(() => [
+  {
+    key: 'site',
+    tone: 'site',
+    icon: Monitor,
+    title: t('autoOps.scenarioSiteTitle'),
+    desc: t('autoOps.scenarioSiteDesc'),
+    cta: t('autoOps.scenarioSiteCta'),
+    action: () => { hubFilter.value = 'site'; applyBeginnerPreset() },
+  },
+  {
+    key: 'dev',
+    tone: 'dev',
+    icon: Promotion,
+    title: t('autoOps.scenarioDevTitle'),
+    desc: t('autoOps.scenarioDevDesc'),
+    cta: t('autoOps.scenarioDevCta'),
+    action: () => { hubFilter.value = 'dev'; goPath('/devops') },
+  },
+  {
+    key: 'test',
+    tone: 'test',
+    icon: DataAnalysis,
+    title: t('autoOps.scenarioTestTitle'),
+    desc: t('autoOps.scenarioTestDesc'),
+    cta: t('autoOps.scenarioTestCta'),
+    action: () => { hubFilter.value = 'test'; tab.value = 'websites'; loadWebsiteAudits() },
+  },
+  {
+    key: 'storage',
+    tone: 'storage',
+    icon: FolderOpened,
+    title: t('autoOps.scenarioStorageTitle'),
+    desc: t('autoOps.scenarioStorageDesc'),
+    cta: t('autoOps.scenarioStorageCta'),
+    action: () => { hubFilter.value = 'storage'; quickImportBackup() },
+  },
+  {
+    key: 'security',
+    tone: 'security',
+    icon: Lock,
+    title: t('autoOps.scenarioSecurityTitle'),
+    desc: t('autoOps.scenarioSecurityDesc'),
+    cta: t('autoOps.scenarioSecurityCta'),
+    action: () => { hubFilter.value = 'security'; goPath('/protection', 'firewall') },
+  },
+])
 
 const quickLinks = computed(() => [
-  { path: '/product-analytics', icon: DataAnalysis, title: t('menu.abTesting'), desc: t('autoOps.linkAbTesting'), audience: t('autoOps.audienceProduct'), stat: 'A/B' },
-  { path: '/uptime', icon: Bell, title: t('menu.uptime'), desc: t('autoOps.linkUptime'), audience: t('autoOps.audienceSite'), stat: overview.value ? `${(overview.value.uptime_total || 0) - (overview.value.uptime_down || 0)}/${overview.value.uptime_total || 0}` : '—' },
-  { path: '/cron', icon: Timer, title: t('menu.cron'), desc: t('autoOps.linkCron'), audience: t('autoOps.audienceAll'), stat: overview.value ? `${overview.value.cron_enabled || 0}/${overview.value.cron_total || 0}` : '—' },
-  { path: '/backup', icon: FolderOpened, title: t('menu.backup'), desc: t('autoOps.linkBackup'), audience: t('autoOps.audienceSite'), stat: overview.value ? `${overview.value.backup_enabled || 0}/${overview.value.backup_total || 0}` : '—' },
-  { path: '/oss', icon: Upload, title: t('menu.oss'), desc: t('autoOps.linkOSS'), audience: t('autoOps.audienceOps'), stat: cloudHub.value?.summary?.oss_storages ? String(cloudHub.value.summary.oss_storages) : '—' },
-  { path: '/devops', icon: Promotion, title: t('menu.devops'), desc: t('autoOps.linkDevops'), audience: t('autoOps.audienceDev'), stat: 'CI/CD', adminOnly: true },
-  { path: '/cluster', icon: Share, title: t('menu.cluster'), desc: t('autoOps.linkCluster'), audience: t('autoOps.audienceOps'), stat: t('autoOps.multiNode') },
-  { path: '/k8s', icon: Platform, title: t('menu.k8s'), desc: t('autoOps.linkK8s'), audience: t('autoOps.audienceContainer'), stat: overview.value?.k8s_ready ? t('k8s.ready') : (overview.value?.k8s_installed ? t('k8s.notReady') : '—'), adminOnly: true },
-  { path: '/ssl', icon: Lock, title: t('menu.ssl'), desc: t('autoOps.linkSSL'), audience: t('autoOps.audienceSite'), stat: overview.value?.ssl_expiring_soon ? t('autoOps.expiringCount', { n: overview.value.ssl_expiring_soon }) : '—' },
-  { path: '/websites', icon: Bell, title: t('menu.website'), desc: t('autoOps.linkSites'), audience: t('autoOps.audienceSite'), stat: overview.value?.sites_expiring_soon ? t('autoOps.expiringCount', { n: overview.value.sites_expiring_soon }) : '—' },
-  { path: '/logs', icon: Document, title: t('menu.logs'), desc: t('autoOps.linkLogs'), audience: t('autoOps.audienceOps'), stat: overview.value?.log_auto_cleanup ? t('autoOps.logCleanupOn') : t('autoOps.logCleanupOff'), adminOnly: true },
-  { path: '/extensions', icon: Box, title: t('menu.extensions'), desc: t('autoOps.linkExtensions'), audience: t('autoOps.audienceDev'), stat: t('autoOps.hooks'), adminOnly: true },
-  { path: '/protection', icon: Histogram, title: t('menu.protection'), desc: t('autoOps.linkProtection'), audience: t('autoOps.audienceSecurity'), stat: 'WAF' },
+  { path: '/websites', cat: 'site', icon: Monitor, title: t('menu.website'), desc: t('autoOps.linkSites'), audience: t('autoOps.audienceSite'), stat: overview.value?.sites_expiring_soon ? t('autoOps.expiringCount', { n: overview.value.sites_expiring_soon }) : '—' },
+  { path: '/ssl', cat: 'security', icon: Lock, title: t('menu.ssl'), desc: t('autoOps.linkSSL'), audience: t('autoOps.audienceSite'), stat: overview.value?.ssl_expiring_soon ? t('autoOps.expiringCount', { n: overview.value.ssl_expiring_soon }) : '—' },
+  { path: '/uptime', cat: 'test', icon: Bell, title: t('menu.uptime'), desc: t('autoOps.linkUptime'), audience: t('autoOps.audienceSite'), stat: overview.value ? `${(overview.value.uptime_total || 0) - (overview.value.uptime_down || 0)}/${overview.value.uptime_total || 0}` : '—' },
+  { path: '/product-analytics', cat: 'test', icon: DataAnalysis, title: t('menu.abTesting'), desc: t('autoOps.linkAbTesting'), audience: t('autoOps.audienceProduct'), stat: 'A/B' },
+  { path: '/auto-ops', tab: 'watch', cat: 'ops', icon: Refresh, title: t('autoOps.watchList'), desc: t('autoOps.linkWatch'), audience: t('autoOps.audienceOps'), stat: String(status.value?.watch_count ?? 0) },
+  { path: '/auto-ops', tab: 'websites', cat: 'test', icon: CircleCheck, title: t('autoOps.websiteAuditTab'), desc: t('autoOps.linkWebsiteAudit'), audience: t('autoOps.audienceSite'), stat: overview.value?.website_avg_score != null ? String(overview.value.website_avg_score) : '—' },
+  { path: '/cron', cat: 'ops', icon: Timer, title: t('menu.cron'), desc: t('autoOps.linkCron'), audience: t('autoOps.audienceAll'), stat: overview.value ? `${overview.value.cron_enabled || 0}/${overview.value.cron_total || 0}` : '—' },
+  { path: '/backup', cat: 'storage', icon: FolderOpened, title: t('menu.backup'), desc: t('autoOps.linkBackup'), audience: t('autoOps.audienceSite'), stat: overview.value ? `${overview.value.backup_enabled || 0}/${overview.value.backup_total || 0}` : '—' },
+  { path: '/oss', cat: 'storage', icon: Upload, title: t('menu.oss'), desc: t('autoOps.linkOSS'), audience: t('autoOps.audienceOps'), stat: cloudHub.value?.summary?.oss_storages ? String(cloudHub.value.summary.oss_storages) : '—' },
+  { path: '/devops', cat: 'dev', icon: Promotion, title: t('menu.devops'), desc: t('autoOps.linkDevops'), audience: t('autoOps.audienceDev'), stat: 'CI/CD', adminOnly: true },
+  { path: '/docker', cat: 'dev', icon: Box, title: t('menu.docker'), desc: t('autoOps.linkDocker'), audience: t('autoOps.audienceContainer'), stat: 'Docker' },
+  { path: '/compose', cat: 'dev', icon: Box, title: t('menu.compose'), desc: t('autoOps.linkCompose'), audience: t('autoOps.audienceContainer'), stat: 'Stack' },
+  { path: '/k8s', cat: 'dev', icon: Platform, title: t('menu.k8s'), desc: t('autoOps.linkK8s'), audience: t('autoOps.audienceContainer'), stat: overview.value?.k8s_ready ? t('k8s.ready') : (overview.value?.k8s_installed ? t('k8s.notReady') : '—'), adminOnly: true },
+  { path: '/cluster', cat: 'cloud', icon: Share, title: t('menu.cluster'), desc: t('autoOps.linkCluster'), audience: t('autoOps.audienceOps'), stat: t('autoOps.multiNode') },
+  { path: '/auto-ops', tab: 'cloud', cat: 'cloud', icon: Upload, title: t('autoOps.cloudTab'), desc: t('autoOps.linkCloud'), audience: t('autoOps.audienceOps'), stat: cloudHub.value?.summary?.oss_storages ? String(cloudHub.value.summary.oss_storages) : '—' },
+  { path: '/protection', cat: 'security', icon: Histogram, title: t('menu.protection'), desc: t('autoOps.linkProtection'), audience: t('autoOps.audienceSecurity'), stat: 'WAF' },
+  { path: '/logs', cat: 'ops', icon: Document, title: t('menu.logs'), desc: t('autoOps.linkLogs'), audience: t('autoOps.audienceOps'), stat: overview.value?.log_auto_cleanup ? t('autoOps.logCleanupOn') : t('autoOps.logCleanupOff'), adminOnly: true },
+  { path: '/extensions', cat: 'dev', icon: Box, title: t('menu.extensions'), desc: t('autoOps.linkExtensions'), audience: t('autoOps.audienceDev'), stat: t('autoOps.hooks'), adminOnly: true },
 ])
+
+const capabilityGroups = computed(() => {
+  const order = hubCategories.value.filter((c) => c.key !== 'all')
+  return order
+    .map((cat) => ({
+      ...cat,
+      items: quickLinks.value.filter((l) => l.cat === cat.key && (!l.adminOnly || isAdmin.value)),
+    }))
+    .filter((g) => g.items.length > 0)
+    .filter((g) => hubFilter.value === 'all' || g.key === hubFilter.value)
+})
+
+const healthChips = computed(() => [
+  {
+    label: t('autoOps.serviceWatch'),
+    value: String(status.value?.watch_count ?? 0),
+    warn: (status.value?.down_count ?? 0) > 0,
+    click: () => { tab.value = 'watch' },
+  },
+  {
+    label: t('autoOps.uptimeMonitors'),
+    value: String(overview.value?.uptime_total ?? 0),
+    warn: (overview.value?.uptime_down ?? 0) > 0,
+    click: () => goPath('/uptime'),
+  },
+  {
+    label: t('autoOps.backupTasks'),
+    value: `${overview.value?.backup_enabled ?? 0}/${overview.value?.backup_total ?? 0}`,
+    warn: false,
+    click: () => goPath('/backup'),
+  },
+  {
+    label: t('autoOps.sslExpiring'),
+    value: String(overview.value?.ssl_expiring_soon ?? 0),
+    warn: (overview.value?.ssl_expiring_soon ?? 0) > 0,
+    click: () => goPath('/ssl'),
+  },
+  {
+    label: t('autoOps.websiteAudit'),
+    value: overview.value?.website_avg_score != null ? String(overview.value.website_avg_score) : '—',
+    warn: (overview.value?.website_issues ?? 0) > 0,
+    click: () => { tab.value = 'websites'; loadWebsiteAudits() },
+  },
+  {
+    label: t('autoOps.cronJobs'),
+    value: `${overview.value?.cron_enabled ?? 0}/${overview.value?.cron_total ?? 0}`,
+    warn: (overview.value?.cron_failed ?? 0) > 0,
+    click: () => goPath('/cron'),
+  },
+])
+
+function dismissGuideBanner() {
+  showGuideBanner.value = false
+  localStorage.setItem('autoOpsGuideSeen', '1')
+}
+
+function openGuide() {
+  tab.value = 'guide'
+  dismissGuideBanner()
+}
+
+function openCapability(link: { path: string; tab?: string; adminOnly?: boolean }) {
+  if (link.adminOnly && !isAdmin.value) {
+    ElMessage.warning(t('autoOps.adminOnly'))
+    return
+  }
+  goPath(link.path, link.tab)
+}
 
 const beginnerPaths = computed(() => [
   {
@@ -207,7 +346,8 @@ function goPath(path: string, tabName?: string, query?: Record<string, string>) 
     router.replace({ path, query: { tab: tabName, ...query } })
     return
   }
-  router.push({ path, query })
+  const q = { ...(query || {}), ...(tabName ? { tab: tabName } : {}) }
+  router.push({ path, query: Object.keys(q).length ? q : undefined })
 }
 
 function goOSSProvider(provider: string) {
@@ -533,16 +673,14 @@ async function bulkEnable(autoRestart: boolean) {
 }
 
 onMounted(() => {
-  if (tab.value === 'guide') localStorage.setItem('autoOpsGuideSeen', '1')
   load()
   loadOverview()
   loadEvents()
-  if (route.query.tab === 'watch') tab.value = 'watch'
-  if (route.query.tab === 'events') tab.value = 'events'
-  if (route.query.tab === 'settings') tab.value = 'settings'
-  if (route.query.tab === 'websites') tab.value = 'websites'
-  if (route.query.tab === 'guide') tab.value = 'guide'
-  if (route.query.tab === 'cloud') tab.value = 'cloud'
+  const qTab = String(route.query.tab || '')
+  if (['watch', 'events', 'settings', 'websites', 'guide', 'cloud', 'overview'].includes(qTab)) {
+    tab.value = qTab
+  }
+  if (tab.value === 'guide') dismissGuideBanner()
   loadWebsiteAudits()
   loadCloudHub()
   timer = setInterval(() => {
@@ -558,26 +696,45 @@ onUnmounted(() => clearInterval(timer))
 
 <template>
   <div class="auto-ops-page" v-loading="loading">
-    <div class="page-header">
-      <div>
-        <h2>{{ t('autoOps.title') }}</h2>
-        <p class="hint">{{ t('autoOps.subtitle') }}</p>
-        <p v-if="status?.last_scan" class="last-scan">{{ t('autoOps.lastScan') }}: {{ formatTime(status.last_scan) }}</p>
+    <header class="ao-hero">
+      <div class="ao-hero-main">
+        <div class="ao-hero-badge">
+          <el-icon :size="22"><Tools /></el-icon>
+        </div>
+        <div>
+          <h1 class="ao-title">{{ t('autoOps.title') }}</h1>
+          <p class="ao-sub">{{ t('autoOps.subtitleShort') }}</p>
+          <p v-if="status?.last_scan" class="ao-meta">{{ t('autoOps.lastScan') }}: {{ formatTime(status.last_scan) }}</p>
+        </div>
       </div>
-      <div class="header-stats">
-        <el-tag :type="status?.config?.enabled ? 'success' : 'info'">
-          {{ status?.config?.enabled ? t('autoOps.enabled') : t('autoOps.disabled') }}
-        </el-tag>
-        <el-tag type="info">{{ t('autoOps.installedCount', { n: installedCount }) }}</el-tag>
-        <el-tag type="warning">{{ t('autoOps.watching', { n: status?.watch_count ?? 0 }) }}</el-tag>
-        <el-tag v-if="(status?.down_count ?? 0) > 0" type="danger">
-          {{ t('autoOps.downCount', { n: status?.down_count }) }}
-        </el-tag>
+      <div class="ao-hero-actions">
+        <div class="ao-status-pills">
+          <span class="ao-pill" :class="status?.config?.enabled ? 'ok' : 'off'">
+            {{ status?.config?.enabled ? t('autoOps.enabled') : t('autoOps.disabled') }}
+          </span>
+          <span class="ao-pill">{{ t('autoOps.watching', { n: status?.watch_count ?? 0 }) }}</span>
+          <span v-if="(status?.down_count ?? 0) > 0" class="ao-pill danger">
+            <el-icon><WarningFilled /></el-icon>
+            {{ t('autoOps.downCount', { n: status?.down_count }) }}
+          </span>
+        </div>
+        <el-button @click="openGuide">{{ t('autoOps.guideTab') }}</el-button>
         <el-button type="primary" @click="scanNow">{{ t('autoOps.scanNow') }}</el-button>
+      </div>
+    </header>
+
+    <div v-if="showGuideBanner" class="ao-banner">
+      <div>
+        <strong>{{ t('autoOps.bannerTitle') }}</strong>
+        <p>{{ t('autoOps.bannerBody') }}</p>
+      </div>
+      <div class="ao-banner-actions">
+        <el-button type="primary" @click="openGuide">{{ t('autoOps.bannerGuide') }}</el-button>
+        <el-button @click="dismissGuideBanner">{{ t('autoOps.bannerDismiss') }}</el-button>
       </div>
     </div>
 
-    <el-tabs v-model="tab" @tab-change="(name: string) => { if (name === 'websites') loadWebsiteAudits(); if (name === 'cloud') loadCloudHub() }">
+    <el-tabs v-model="tab" class="ao-tabs" @tab-change="(name: string) => { if (name === 'websites') loadWebsiteAudits(); if (name === 'cloud') loadCloudHub(); if (name === 'guide') dismissGuideBanner() }">
       <el-tab-pane :label="t('autoOps.guideTab')" name="guide">
         <el-alert type="info" :closable="false" show-icon class="guide-intro">
           <template #title>{{ t('autoOps.guideIntroTitle') }}</template>
@@ -758,141 +915,161 @@ onUnmounted(() => clearInterval(timer))
       </el-tab-pane>
 
       <el-tab-pane :label="t('autoOps.overview')" name="overview">
-        <div class="overview-grid">
-          <div class="resource-row">
-            <el-card shadow="never" class="stat-card stat-card-resource">
-              <div class="resource-gauge">
-                <el-progress
-                  type="dashboard"
-                  :percentage="resourcePercent(overview?.cpu_percent)"
-                  :color="resourceColor(overview?.cpu_percent || 0)"
-                  :width="108"
-                  :stroke-width="10"
-                >
-                  <template #default>
-                    <span class="gauge-val">{{ resourceFormat(overview?.cpu_percent) }}</span>
-                  </template>
-                </el-progress>
-                <div class="resource-label">
-                  <el-icon><Cpu /></el-icon>
-                  <span>CPU</span>
-                </div>
-              </div>
-            </el-card>
-            <el-card shadow="never" class="stat-card stat-card-resource">
-              <div class="resource-gauge">
-                <el-progress
-                  type="dashboard"
-                  :percentage="resourcePercent(overview?.memory_percent)"
-                  :color="resourceColor(overview?.memory_percent || 0)"
-                  :width="108"
-                  :stroke-width="10"
-                >
-                  <template #default>
-                    <span class="gauge-val">{{ resourceFormat(overview?.memory_percent) }}</span>
-                  </template>
-                </el-progress>
-                <div class="resource-label">
-                  <el-icon><Coin /></el-icon>
-                  <span>{{ t('autoOps.memory') }}</span>
-                </div>
-              </div>
-            </el-card>
-            <el-card shadow="never" class="stat-card stat-card-resource">
-              <div class="resource-gauge">
-                <el-progress
-                  type="dashboard"
-                  :percentage="resourcePercent(overview?.disk_percent)"
-                  :color="resourceColor(overview?.disk_percent || 0)"
-                  :width="108"
-                  :stroke-width="10"
-                >
-                  <template #default>
-                    <span class="gauge-val">{{ resourceFormat(overview?.disk_percent) }}</span>
-                  </template>
-                </el-progress>
-                <div class="resource-label">
-                  <el-icon><FolderOpened /></el-icon>
-                  <span>{{ t('autoOps.disk') }}</span>
-                </div>
-              </div>
-            </el-card>
+        <section class="ao-section">
+          <div class="ao-section-head">
+            <h3>{{ t('autoOps.scenarioTitle') }}</h3>
+            <p>{{ t('autoOps.scenarioDesc') }}</p>
           </div>
-          <el-card shadow="never" class="stat-card">
-            <div class="stat-label">{{ t('autoOps.uptimeMonitors') }}</div>
-            <div class="stat-big">{{ overview?.uptime_total ?? 0 }}</div>
-            <div v-if="(overview?.uptime_down ?? 0) > 0" class="stat-warn">{{ t('autoOps.uptimeDown', { n: overview.uptime_down }) }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card">
-            <div class="stat-label">{{ t('autoOps.cronJobs') }}</div>
-            <div class="stat-big">{{ overview?.cron_enabled ?? 0 }} / {{ overview?.cron_total ?? 0 }}</div>
-            <div v-if="(overview?.cron_failed ?? 0) > 0" class="stat-warn">{{ t('autoOps.cronFailed', { n: overview.cron_failed }) }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card">
-            <div class="stat-label">{{ t('autoOps.serviceWatch') }}</div>
-            <div class="stat-big">{{ status?.watch_count ?? 0 }}</div>
-            <div v-if="(status?.down_count ?? 0) > 0" class="stat-warn">{{ t('autoOps.downCount', { n: status.down_count }) }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card clickable" @click="router.push('/backup')">
-            <div class="stat-label">{{ t('autoOps.backupTasks') }}</div>
-            <div class="stat-big">{{ overview?.backup_enabled ?? 0 }} / {{ overview?.backup_total ?? 0 }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card clickable" @click="router.push('/settings')">
-            <div class="stat-label">{{ t('autoOps.panelCloudBackup') }}</div>
-            <div class="stat-big">{{ overview?.panel_backup_last_at ? new Date(overview.panel_backup_last_at).toLocaleDateString() : '—' }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card clickable" @click="router.push('/logs')">
-            <div class="stat-label">{{ t('autoOps.logRotation') }}</div>
-            <div class="stat-big">{{ overview?.log_rotation_on ? `${overview.log_max_size_mb}MB` : t('autoOps.logCleanupOff') }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card clickable" @click="router.push('/oss')">
-            <div class="stat-label">{{ t('autoOps.ossLifecycle') }}</div>
-            <div class="stat-big">{{ (overview?.oss_lifecycle_rules ?? 0) + (overview?.oss_archive_rules ?? 0) }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card clickable" @click="router.push('/ssl')">
-            <div class="stat-label">{{ t('autoOps.sslExpiring') }}</div>
-            <div class="stat-big">{{ overview?.ssl_expiring_soon ?? 0 }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card clickable" @click="router.push('/websites')">
-            <div class="stat-label">{{ t('autoOps.sitesExpiring') }}</div>
-            <div class="stat-big">{{ overview?.sites_expiring_soon ?? 0 }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card clickable" @click="router.push('/k8s')">
-            <div class="stat-label">{{ t('autoOps.k8sCluster') }}</div>
-            <div class="stat-big">{{ overview?.k8s_ready ? t('k8s.ready') : (overview?.k8s_installed ? t('k8s.notReady') : '—') }}</div>
-          </el-card>
-          <el-card shadow="never" class="stat-card clickable" @click="tab = 'websites'; loadWebsiteAudits()">
-            <div class="stat-label">{{ t('autoOps.websiteAudit') }}</div>
-            <div class="stat-big">{{ overview?.website_avg_score ?? '—' }}</div>
-            <div v-if="(overview?.website_issues ?? 0) > 0" class="stat-warn">{{ t('autoOps.websiteIssues', { n: overview.website_issues }) }}</div>
-          </el-card>
-        </div>
-
-        <h3 class="section-title">{{ t('autoOps.quickLinks') }}</h3>
-        <div class="overview-quick">
-          <el-button :loading="quickImporting === 'uptime'" @click="quickImportUptime">{{ t('autoOps.quickImportUptime') }}</el-button>
-          <el-button type="success" :loading="quickImporting === 'backup'" @click="quickImportBackup">{{ t('autoOps.quickImportBackup') }}</el-button>
-          <span class="overview-quick-hint">{{ t('autoOps.quickImportHint') }}</span>
-        </div>
-        <div class="link-grid">
-          <button v-for="link in quickLinks" :key="link.path" type="button" class="link-card" @click="router.push(link.path)">
-            <el-icon class="link-icon"><component :is="link.icon" /></el-icon>
-            <div class="link-body">
-              <div class="link-title-row">
-                <span class="link-title">{{ link.title }}</span>
-                <el-tag v-if="link.adminOnly && !isAdmin" type="warning" size="small">{{ t('autoOps.adminOnly') }}</el-tag>
+          <div class="scenario-grid">
+            <article
+              v-for="sc in scenarios"
+              :key="sc.key"
+              class="scenario-card"
+              :class="[`tone-${sc.tone}`, { active: hubFilter === sc.key }]"
+              @click="hubFilter = sc.key"
+            >
+              <div class="scenario-icon"><el-icon :size="20"><component :is="sc.icon" /></el-icon></div>
+              <div class="scenario-body">
+                <h4>{{ sc.title }}</h4>
+                <p>{{ sc.desc }}</p>
               </div>
-              <div class="link-desc">{{ link.desc }}</div>
-              <div class="link-audience">{{ link.audience }}</div>
-            </div>
-            <span class="link-stat">{{ link.stat }}</span>
-            <el-icon><ArrowRight /></el-icon>
-          </button>
-        </div>
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                :loading="(sc.key === 'site' && applyingPreset === 'site') || (sc.key === 'storage' && quickImporting === 'backup')"
+                @click.stop="sc.action()"
+              >
+                {{ sc.cta }}
+              </el-button>
+            </article>
+          </div>
+        </section>
 
-        <el-alert type="info" :closable="false" show-icon class="overview-hint">
-          {{ t('autoOps.overviewHint') }}
-        </el-alert>
+        <section class="ao-section health-section">
+          <div class="ao-section-head">
+            <h3>{{ t('autoOps.healthTitle') }}</h3>
+            <p>{{ t('autoOps.healthDesc') }}</p>
+          </div>
+          <div class="health-board">
+            <div class="gauge-row">
+              <div class="gauge-card">
+                <el-progress type="dashboard" :percentage="resourcePercent(overview?.cpu_percent)" :color="resourceColor(overview?.cpu_percent || 0)" :width="100" :stroke-width="9">
+                  <template #default><span class="gauge-val">{{ resourceFormat(overview?.cpu_percent) }}</span></template>
+                </el-progress>
+                <div class="resource-label"><el-icon><Cpu /></el-icon><span>CPU</span></div>
+              </div>
+              <div class="gauge-card">
+                <el-progress type="dashboard" :percentage="resourcePercent(overview?.memory_percent)" :color="resourceColor(overview?.memory_percent || 0)" :width="100" :stroke-width="9">
+                  <template #default><span class="gauge-val">{{ resourceFormat(overview?.memory_percent) }}</span></template>
+                </el-progress>
+                <div class="resource-label"><el-icon><Coin /></el-icon><span>{{ t('autoOps.memory') }}</span></div>
+              </div>
+              <div class="gauge-card">
+                <el-progress type="dashboard" :percentage="resourcePercent(overview?.disk_percent)" :color="resourceColor(overview?.disk_percent || 0)" :width="100" :stroke-width="9">
+                  <template #default><span class="gauge-val">{{ resourceFormat(overview?.disk_percent) }}</span></template>
+                </el-progress>
+                <div class="resource-label"><el-icon><FolderOpened /></el-icon><span>{{ t('autoOps.disk') }}</span></div>
+              </div>
+            </div>
+            <div class="chip-row">
+              <button
+                v-for="chip in healthChips"
+                :key="chip.label"
+                type="button"
+                class="health-chip"
+                :class="{ warn: chip.warn }"
+                @click="chip.click()"
+              >
+                <span class="health-chip-label">{{ chip.label }}</span>
+                <strong>{{ chip.value }}</strong>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="ao-section">
+          <div class="ao-section-head">
+            <h3>{{ t('autoOps.quickActionsTitle') }}</h3>
+            <p>{{ t('autoOps.quickActionsDesc') }}</p>
+          </div>
+          <div class="action-grid">
+            <button type="button" class="action-tile" @click="scanNow">
+              <el-icon><Refresh /></el-icon>
+              <span>{{ t('autoOps.scanNow') }}</span>
+            </button>
+            <button type="button" class="action-tile" :disabled="!!quickImporting" @click="quickImportUptime">
+              <el-icon><Bell /></el-icon>
+              <span>{{ t('autoOps.quickImportUptime') }}</span>
+            </button>
+            <button type="button" class="action-tile" :disabled="!!quickImporting" @click="quickImportBackup">
+              <el-icon><FolderOpened /></el-icon>
+              <span>{{ t('autoOps.quickImportBackup') }}</span>
+            </button>
+            <button type="button" class="action-tile" :disabled="!!applyingPreset" @click="applyBeginnerPreset">
+              <el-icon><MagicStick /></el-icon>
+              <span>{{ t('autoOps.presetSiteBtn') }}</span>
+            </button>
+            <button type="button" class="action-tile" @click="tab = 'watch'">
+              <el-icon><Monitor /></el-icon>
+              <span>{{ t('autoOps.watchList') }}</span>
+            </button>
+            <button type="button" class="action-tile" @click="tab = 'settings'">
+              <el-icon><Tools /></el-icon>
+              <span>{{ t('autoOps.settings') }}</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="ao-section">
+          <div class="ao-section-head row">
+            <div>
+              <h3>{{ t('autoOps.hubTitle') }}</h3>
+              <p>{{ t('autoOps.hubDesc') }}</p>
+            </div>
+          </div>
+          <div class="hub-filters">
+            <button
+              v-for="cat in hubCategories"
+              :key="cat.key"
+              type="button"
+              class="hub-filter"
+              :class="{ active: hubFilter === cat.key }"
+              @click="hubFilter = cat.key"
+            >
+              <el-icon><component :is="cat.icon" /></el-icon>
+              {{ cat.label }}
+            </button>
+          </div>
+
+          <div v-for="group in capabilityGroups" :key="group.key" class="cap-group">
+            <div class="cap-group-head">
+              <el-icon><component :is="group.icon" /></el-icon>
+              <span>{{ group.label }}</span>
+              <small>{{ t('autoOps.hubCount', { n: group.items.length }) }}</small>
+            </div>
+            <div class="cap-grid">
+              <button
+                v-for="link in group.items"
+                :key="`${link.path}-${link.tab || ''}-${link.title}`"
+                type="button"
+                class="cap-card"
+                @click="openCapability(link)"
+              >
+                <div class="cap-icon"><el-icon :size="18"><component :is="link.icon" /></el-icon></div>
+                <div class="cap-main">
+                  <div class="cap-title">{{ link.title }}</div>
+                  <div class="cap-desc">{{ link.desc }}</div>
+                  <div class="cap-meta">{{ link.audience }}</div>
+                </div>
+                <div class="cap-side">
+                  <span class="cap-stat">{{ link.stat }}</span>
+                  <el-icon><ArrowRight /></el-icon>
+                </div>
+              </button>
+            </div>
+          </div>
+        </section>
       </el-tab-pane>
 
       <el-tab-pane :label="t('autoOps.watchList')" name="watch">
@@ -1154,6 +1331,156 @@ onUnmounted(() => clearInterval(timer))
 </template>
 
 <style scoped>
+.ao-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 20px 22px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 18px;
+  background:
+    radial-gradient(900px 160px at 0% 0%, color-mix(in srgb, var(--el-color-primary) 16%, transparent), transparent 60%),
+    linear-gradient(180deg, var(--el-fill-color-blank, #fff), var(--el-fill-color-lighter));
+}
+.ao-hero-main { display: flex; gap: 14px; align-items: center; }
+.ao-hero-badge {
+  width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(145deg, var(--el-color-primary-light-3), var(--el-color-primary));
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--el-color-primary) 30%, transparent);
+}
+.ao-title { margin: 0; font-size: 24px; font-weight: 740; letter-spacing: -0.02em; }
+.ao-sub { margin: 4px 0 0; font-size: 13px; color: var(--el-text-color-secondary); max-width: 520px; line-height: 1.5; }
+.ao-meta { margin: 4px 0 0; font-size: 12px; color: var(--el-text-color-secondary); }
+.ao-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ao-status-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-right: 4px; }
+.ao-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--el-fill-color); color: var(--el-text-color-regular);
+}
+.ao-pill.ok { background: #ecfdf5; color: #059669; }
+.ao-pill.off { background: var(--el-fill-color); color: var(--el-text-color-secondary); }
+.ao-pill.danger { background: #fef2f2; color: #dc2626; }
+
+.ao-banner {
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center;
+  margin-bottom: 16px; padding: 14px 16px; border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--el-color-primary) 28%, var(--el-border-color-lighter));
+  background: color-mix(in srgb, var(--el-color-primary) 8%, var(--el-bg-color));
+}
+.ao-banner strong { display: block; margin-bottom: 4px; }
+.ao-banner p { margin: 0; font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.5; }
+.ao-banner-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.ao-tabs :deep(.el-tabs__header) { margin-bottom: 18px; }
+.ao-section { margin-bottom: 22px; }
+.ao-section-head { margin-bottom: 12px; }
+.ao-section-head h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+.ao-section-head p { margin: 0; font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.5; }
+.ao-section-head.row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; }
+
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.scenario-card {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px; border-radius: 14px; border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-bg-color); cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.scenario-card:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(15,23,42,.06); }
+.scenario-card.active { border-color: color-mix(in srgb, var(--el-color-primary) 45%, var(--el-border-color-lighter)); }
+.scenario-icon {
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+}
+.tone-site .scenario-icon { background: #eff6ff; color: #2563eb; }
+.tone-dev .scenario-icon { background: #fff7ed; color: #ea580c; }
+.tone-test .scenario-icon { background: #f5f3ff; color: #7c3aed; }
+.tone-storage .scenario-icon { background: #ecfdf5; color: #059669; }
+.tone-security .scenario-icon { background: #fef2f2; color: #dc2626; }
+.scenario-body h4 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+.scenario-body p { margin: 0; font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.45; min-height: 34px; }
+
+.health-board {
+  display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 14px;
+  padding: 16px; border-radius: 16px; border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-bg-color);
+}
+.gauge-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.gauge-card { text-align: center; }
+.chip-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-content: start; }
+.health-chip {
+  border: 1px solid var(--el-border-color-lighter); border-radius: 12px; background: var(--el-fill-color-lighter);
+  padding: 12px 14px; text-align: left; cursor: pointer; transition: border-color .15s ease;
+}
+.health-chip:hover { border-color: var(--el-color-primary-light-5); }
+.health-chip.warn { border-color: color-mix(in srgb, #dc2626 35%, var(--el-border-color-lighter)); background: #fef2f2; }
+.health-chip-label { display: block; font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 4px; }
+.health-chip strong { font-size: 20px; letter-spacing: -0.02em; }
+
+.action-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.action-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  min-height: 88px; padding: 12px; border-radius: 14px; border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-bg-color); cursor: pointer; font-size: 12px; font-weight: 650; color: var(--el-text-color-primary);
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.action-tile .el-icon { font-size: 20px; color: var(--el-color-primary); }
+.action-tile:hover:not(:disabled) {
+  transform: translateY(-1px); border-color: var(--el-color-primary-light-5);
+  box-shadow: 0 8px 18px rgba(15,23,42,.05);
+}
+.action-tile:disabled { opacity: .55; cursor: not-allowed; }
+
+.hub-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.hub-filter {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--el-border-color-lighter); background: var(--el-bg-color);
+  border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 650; cursor: pointer;
+  color: var(--el-text-color-secondary);
+}
+.hub-filter.active, .hub-filter:hover {
+  color: var(--el-color-primary);
+  border-color: color-mix(in srgb, var(--el-color-primary) 40%, var(--el-border-color-lighter));
+  background: color-mix(in srgb, var(--el-color-primary) 8%, var(--el-bg-color));
+}
+.cap-group { margin-bottom: 16px; }
+.cap-group-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  font-weight: 700; font-size: 14px;
+}
+.cap-group-head small { margin-left: auto; font-weight: 500; color: var(--el-text-color-secondary); }
+.cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.cap-card {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  padding: 14px; border-radius: 14px; border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-bg-color); cursor: pointer; transition: border-color .15s ease, transform .15s ease;
+}
+.cap-card:hover { border-color: var(--el-color-primary-light-5); transform: translateY(-1px); }
+.cap-icon {
+  width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0;
+  background: var(--el-fill-color-lighter); color: var(--el-color-primary);
+}
+.cap-main { min-width: 0; flex: 1; }
+.cap-title { font-size: 14px; font-weight: 700; }
+.cap-desc { margin-top: 2px; font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.4; }
+.cap-meta { margin-top: 4px; font-size: 11px; color: var(--el-color-primary); }
+.cap-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; color: var(--el-text-color-secondary); }
+.cap-stat { font-size: 12px; font-weight: 650; }
+
+@media (max-width: 1200px) {
+  .scenario-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .action-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .health-board { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .scenario-grid, .action-grid, .chip-row, .gauge-row { grid-template-columns: 1fr; }
+}
+
 .guide-intro { margin-bottom: 20px; }
 .guide-intro-text { margin: 8px 0 0; line-height: 1.7; font-size: 13px; }
 .section-title { margin: 24px 0 8px; font-size: 16px; font-weight: 600; }
