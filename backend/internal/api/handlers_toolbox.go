@@ -27,6 +27,8 @@ func (s *Server) registerToolboxRoutes(admin *gin.RouterGroup) {
 	admin.PUT("/toolbox/snippets/:id", s.handleToolboxUpdateSnippet)
 	admin.DELETE("/toolbox/snippets/:id", s.handleToolboxDeleteSnippet)
 	admin.POST("/toolbox/snippets/run", s.handleToolboxRunSnippet)
+
+	admin.POST("/toolbox/bench/:kind", s.handleToolboxBench)
 }
 
 func toolboxLang(c *gin.Context) string {
@@ -209,6 +211,25 @@ func (s *Server) handleToolboxDeleteSnippet(c *gin.Context) {
 		return
 	}
 	response.Message(c, "deleted")
+}
+
+func (s *Server) handleToolboxBench(c *gin.Context) {
+	kind := strings.ToLower(strings.TrimSpace(c.Param("kind")))
+	result, err := s.toolbox.RunBench(kind)
+	if err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "已有性能测试") {
+			response.Error(c, 409, msg)
+			return
+		}
+		if strings.Contains(msg, "未知测试类型") {
+			response.Error(c, 400, msg)
+			return
+		}
+		response.Error(c, 500, msg)
+		return
+	}
+	response.OK(c, result)
 }
 
 func (s *Server) handleToolboxRunSnippet(c *gin.Context) {

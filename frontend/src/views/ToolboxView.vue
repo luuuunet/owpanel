@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import api from '@/api'
 import { apiContentLang } from '@/locales'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CopyDocument, Delete, Edit, Plus, RefreshRight, VideoPlay,
-  Monitor, Cpu, Odometer,
+  Monitor, Cpu, Odometer, Coin, FolderOpened, Connection,
 } from '@element-plus/icons-vue'
 
 const { t, locale } = useI18n()
+const route = useRoute()
 
 const activeTab = ref('system')
 const loading = ref(false)
+const benchLoading = ref<string | null>(null)
+const benchResults = ref<Record<string, any>>({})
 
 // Network tools
 const host = ref('baidu.com')
@@ -231,6 +235,30 @@ async function deleteSnippet(item: any) {
   await loadSnippets()
 }
 
+const benchCards = computed(() => [
+  { kind: 'cpu', icon: Cpu, title: t('toolboxPage.benchCPU'), desc: t('toolboxPage.benchCPUDesc') },
+  { kind: 'memory', icon: Coin, title: t('toolboxPage.benchMemory'), desc: t('toolboxPage.benchMemoryDesc') },
+  { kind: 'disk', icon: FolderOpened, title: t('toolboxPage.benchDisk'), desc: t('toolboxPage.benchDiskDesc') },
+  { kind: 'network', icon: Connection, title: t('toolboxPage.benchNetwork'), desc: t('toolboxPage.benchNetworkDesc') },
+])
+
+async function runBench(kind: string) {
+  if (benchLoading.value) {
+    ElMessage.warning(t('toolboxPage.benchBusy'))
+    return
+  }
+  benchLoading.value = kind
+  try {
+    const res: any = await api.post(`/toolbox/bench/${kind}`, {}, { timeout: 120000 })
+    benchResults.value = { ...benchResults.value, [kind]: res.data }
+    ElMessage.success(t('common.success'))
+  } catch (e: any) {
+    ElMessage.error(e?.error || e?.message || t('common.failed'))
+  } finally {
+    benchLoading.value = null
+  }
+}
+
 function onTabChange(name: string | number) {
   if (name === 'system') loadSystem()
   else if (name === 'ports') loadPorts()
@@ -238,7 +266,13 @@ function onTabChange(name: string | number) {
 }
 
 onMounted(() => {
-  loadSystem()
+  const tab = String(route.query.tab || '')
+  if (['system', 'bench', 'ports', 'snippets', 'network'].includes(tab)) {
+    activeTab.value = tab
+  }
+  if (activeTab.value === 'system') loadSystem()
+  else if (activeTab.value === 'ports') loadPorts()
+  else if (activeTab.value === 'snippets') loadSnippets()
 })
 </script>
 
@@ -347,6 +381,43 @@ onMounted(() => {
         </div>
       </el-tab-pane>
 
+      <!-- Benchmarks -->
+      <el-tab-pane :label="t('toolboxPage.tabBench')" name="bench">
+        <div class="tab-body">
+          <p class="bench-hint">{{ t('toolboxPage.benchHint') }}</p>
+          <el-row :gutter="16">
+            <el-col v-for="card in benchCards" :key="card.kind" :xs="24" :sm="12" :lg="6">
+              <el-card shadow="hover" class="bench-card">
+                <div class="bench-card-head">
+                  <el-icon :size="22"><component :is="card.icon" /></el-icon>
+                  <div>
+                    <div class="bench-title">{{ card.title }}</div>
+                    <div class="bench-desc">{{ card.desc }}</div>
+                  </div>
+                </div>
+                <div v-if="benchResults[card.kind]" class="bench-result">
+                  <div class="bench-score">
+                    <span class="bench-score-num">{{ benchResults[card.kind].score }}</span>
+                    <span class="bench-score-unit">{{ benchResults[card.kind].unit }}</span>
+                  </div>
+                  <div class="bench-detail">{{ benchResults[card.kind].detail }}</div>
+                  <div class="bench-meta">{{ t('toolboxPage.benchDuration', { ms: benchResults[card.kind].duration_ms }) }}</div>
+                </div>
+                <el-button
+                  type="primary"
+                  class="bench-run"
+                  :loading="benchLoading === card.kind"
+                  :disabled="!!benchLoading && benchLoading !== card.kind"
+                  @click="runBench(card.kind)"
+                >
+                  {{ benchLoading === card.kind ? t('toolboxPage.benchRunning') : t('toolboxPage.benchRun') }}
+                </el-button>
+              </el-card>
+            </el-col>
+          </el-row>
+        </div>
+      </el-tab-pane>
+
       <!-- Ports -->
       <el-tab-pane :label="t('toolboxPage.tabPorts')" name="ports">
         <div v-loading="loading" class="tab-body">
@@ -436,6 +507,19 @@ onMounted(() => {
 .page-header { margin-bottom: 16px; }
 .subtitle { color: var(--el-text-color-secondary); margin: 4px 0 0; font-size: 13px; }
 .tab-body { padding-top: 8px; }
+.bench-hint { color: var(--el-text-color-secondary); font-size: 13px; margin: 0 0 16px; }
+.bench-card { margin-bottom: 16px; min-height: 220px; display: flex; flex-direction: column; }
+.bench-card :deep(.el-card__body) { display: flex; flex-direction: column; flex: 1; gap: 12px; }
+.bench-card-head { display: flex; gap: 10px; align-items: flex-start; }
+.bench-title { font-weight: 600; font-size: 15px; }
+.bench-desc { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 2px; line-height: 1.4; }
+.bench-result { flex: 1; }
+.bench-score { display: flex; align-items: baseline; gap: 6px; }
+.bench-score-num { font-size: 28px; font-weight: 700; color: var(--el-color-primary); }
+.bench-score-unit { font-size: 13px; color: var(--el-text-color-secondary); }
+.bench-detail { font-size: 12px; margin-top: 6px; line-height: 1.45; color: var(--el-text-color-regular); }
+.bench-meta { font-size: 11px; color: var(--el-text-color-secondary); margin-top: 4px; }
+.bench-run { width: 100%; margin-top: auto; }
 .stat-row { margin-bottom: 16px; }
 .stat-card { text-align: center; }
 .stat-label { display: flex; align-items: center; justify-content: center; gap: 4px; color: var(--el-text-color-secondary); font-size: 13px; }

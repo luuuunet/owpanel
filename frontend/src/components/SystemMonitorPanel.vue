@@ -13,7 +13,8 @@ import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
 import { isChineseLocale } from '@/locales'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MagicStick } from '@element-plus/icons-vue'
+import { MagicStick, Cpu } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import { usePerformanceProfile } from '@/composables/usePerformanceProfile'
 
 const props = withDefaults(defineProps<{ compact?: boolean; sidebar?: boolean; layout?: 'default' | 'dashboard'; hideHealth?: boolean }>(), {
@@ -26,6 +27,7 @@ const props = withDefaults(defineProps<{ compact?: boolean; sidebar?: boolean; l
 const emit = defineEmits<{ stats: [any] }>()
 
 const { t } = useI18n()
+const router = useRouter()
 const localeStore = useLocaleStore()
 const auth = useAuthStore()
 const isAdmin = computed(() => !auth.user?.role || auth.user.role === 'admin')
@@ -674,6 +676,15 @@ onUnmounted(() => {
               <el-radio-button :value="6">{{ t('dashboard.range6h') }}</el-radio-button>
               <el-radio-button :value="24">{{ t('dashboard.range24h') }}</el-radio-button>
             </el-radio-group>
+            <el-button
+              v-if="isAdmin"
+              size="small"
+              plain
+              @click="router.push({ path: '/toolbox', query: { tab: 'bench' } })"
+            >
+              <el-icon class="btn-icon"><Cpu /></el-icon>
+              {{ t('toolboxPage.openBench') }}
+            </el-button>
             <el-button type="primary" size="small" plain :loading="optimizing" @click="onOptimize">
               <el-icon class="btn-icon"><MagicStick /></el-icon>
               {{ t('dashboard.optimizeOneClick') }}
