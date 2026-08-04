@@ -44,6 +44,7 @@ func tryPHPInstall(key, version, installPath, dataDir string) (bool, error) {
 		if err := installWindowsPackages(spec); err != nil {
 			return true, fmt.Errorf("Windows 安装 %s 失败，请确认 winget 可用或手动安装: %w", key, err)
 		}
+		writePHPAdoptMarker(key, ver, dataDir)
 		return true, nil
 	default:
 		return false, nil

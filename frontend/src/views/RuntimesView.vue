@@ -3,8 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
+import SoftwareConfigDialog from '@/components/SoftwareConfigDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Folder, Plus, Delete } from '@element-plus/icons-vue'
+import { Folder, Plus, Delete, Setting } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -22,6 +23,8 @@ const versions = ref<string[]>([])
 const dialogVisible = ref(false)
 const configTab = ref('port')
 const submitting = ref(false)
+const phpConfigDialog = ref(false)
+const phpConfigApp = ref<{ key: string; name: string } | null>(null)
 
 const pathPickerVisible = ref(false)
 const pathEntries = ref<any[]>([])
@@ -113,9 +116,18 @@ watch(activeTab, (tab) => {
 
 watch(() => route.query.tab, syncTabFromRoute)
 
+function openPhpConfig(row: any) {
+  phpConfigApp.value = { key: row.key, name: row.name || `PHP ${row.version}` }
+  phpConfigDialog.value = true
+}
+
+function goInstallPhp() {
+  router.push({ path: '/software', query: { tab: 'store', q: 'PHP' } })
+}
+
 function openCreate() {
   if (isPhpTab.value) {
-    router.push('/php')
+    goInstallPhp()
     return
   }
   form.value = emptyForm()
@@ -247,16 +259,22 @@ onMounted(() => {
   <div class="runtimes-page">
     <div class="page-header">
       <h2>{{ t('runtime.title') }}</h2>
-      <el-button type="primary" @click="openCreate">
-        {{ isPhpTab ? t('runtime.managePhp') : t('runtime.create') }}
-      </el-button>
+      <div class="header-actions">
+        <el-button v-if="isPhpTab" @click="router.push('/php')">{{ t('runtime.managePhp') }}</el-button>
+        <el-button type="primary" @click="openCreate">
+          {{ isPhpTab ? t('runtime.installPhp') : t('runtime.create') }}
+        </el-button>
+      </div>
     </div>
 
     <el-tabs v-model="activeTab" class="runtime-tabs">
       <el-tab-pane v-for="tab in tabs" :key="tab" :label="t(`runtime.tab.${tab}`)" :name="tab" />
     </el-tabs>
 
-    <el-alert v-if="!isPhpTab" type="info" :closable="false" show-icon class="hint">
+    <el-alert v-if="isPhpTab" type="info" :closable="false" show-icon class="hint">
+      {{ t('runtime.phpConfigHint') }}
+    </el-alert>
+    <el-alert v-else type="info" :closable="false" show-icon class="hint">
       {{ t('runtime.hint') }}
     </el-alert>
 
@@ -272,8 +290,11 @@ onMounted(() => {
       </el-table-column>
       <el-table-column v-if="!isPhpTab" prop="container_name" :label="t('runtime.containerName')" min-width="140" show-overflow-tooltip />
       <el-table-column v-if="!isPhpTab" prop="remark" :label="t('runtime.remark')" min-width="120" show-overflow-tooltip />
-      <el-table-column :label="t('common.actions')" width="180" fixed="right">
+      <el-table-column :label="t('common.actions')" :width="isPhpTab ? 260 : 180" fixed="right">
         <template #default="{ row }">
+          <el-button v-if="isPhpTab" text type="primary" :icon="Setting" @click="openPhpConfig(row)">
+            {{ t('common.config') }}
+          </el-button>
           <el-button text type="primary" @click="toggle(row)">
             {{ row.status === 'running' ? t('common.stop') : t('common.start') }}
           </el-button>
@@ -284,7 +305,11 @@ onMounted(() => {
       </el-table-column>
     </el-table>
 
-    <el-empty v-if="!loading && !tableData.length" :description="isPhpTab ? t('runtime.phpEmpty') : t('runtime.empty')" />
+    <el-empty v-if="!loading && !tableData.length" :description="isPhpTab ? t('runtime.phpEmpty') : t('runtime.empty')">
+      <el-button v-if="isPhpTab" type="primary" @click="goInstallPhp">{{ t('runtime.installPhp') }}</el-button>
+    </el-empty>
+
+    <SoftwareConfigDialog v-model="phpConfigDialog" :app="phpConfigApp" />
 
     <el-drawer v-model="dialogVisible" :title="t('runtime.createTitle')" size="520px" direction="rtl">
       <el-form :model="form" label-position="top">
@@ -383,6 +408,8 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.page-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .runtimes-page .hint { margin-bottom: 12px; }
 .runtime-tabs { margin-bottom: 12px; }
 .app-row { display: flex; gap: 8px; width: 100%; }

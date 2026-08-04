@@ -46,8 +46,43 @@ const aiSuggestion = ref<{ config?: Record<string, any>; raw?: string } | null>(
 
 const commonFields = computed(() => {
   const skip = new Set(['disable_functions'])
-  return Object.keys(configForm.value).filter(k => !skip.has(k))
+  const preferred = [
+    'memory_limit', 'upload_max_filesize', 'post_max_size', 'max_execution_time',
+    'max_input_time', 'max_input_vars', 'max_file_uploads', 'date.timezone', 'open_basedir',
+    'display_errors', 'log_errors', 'expose_php', 'short_open_tag',
+    'opcache.enable', 'opcache.memory_consumption', 'opcache.validate_timestamps',
+  ]
+  const keys = Object.keys(configForm.value).filter(k => !skip.has(k))
+  const ordered = preferred.filter(k => keys.includes(k))
+  for (const k of keys) {
+    if (!ordered.includes(k)) ordered.push(k)
+  }
+  return ordered
 })
+
+function fieldLabel(key: string) {
+  const map: Record<string, string> = {
+    memory_limit: t('software.phpConfig.fieldMemory'),
+    upload_max_filesize: t('software.phpConfig.fieldUpload'),
+    post_max_size: t('software.phpConfig.fieldPost'),
+    max_execution_time: t('software.phpConfig.fieldExecTime'),
+    max_input_time: t('software.phpConfig.fieldInputTime'),
+    max_input_vars: t('software.phpConfig.fieldInputVars'),
+    max_file_uploads: t('software.phpConfig.fieldFileUploads'),
+    'date.timezone': t('software.phpConfig.fieldTimezone'),
+    open_basedir: t('software.phpConfig.fieldOpenBasedir'),
+    display_errors: t('software.phpConfig.fieldDisplayErrors'),
+    display_startup_errors: t('software.phpConfig.fieldDisplayStartup'),
+    log_errors: t('software.phpConfig.fieldLogErrors'),
+    expose_php: t('software.phpConfig.fieldExpose'),
+    short_open_tag: t('software.phpConfig.fieldShortOpen'),
+    default_socket_timeout: t('software.phpConfig.fieldSocketTimeout'),
+    'opcache.enable': t('software.phpConfig.fieldOpcacheEnable'),
+    'opcache.memory_consumption': t('software.phpConfig.fieldOpcacheMem'),
+    'opcache.validate_timestamps': t('software.phpConfig.fieldOpcacheValidate'),
+  }
+  return map[key] || key
+}
 
 const supportsExtensions = computed(() => capabilities.value?.supports_extensions ?? isPhp.value)
 const supportsPgExtensions = computed(() => capabilities.value?.supports_pg_extensions ?? props.app?.key === 'postgresql')
@@ -311,8 +346,8 @@ function applyAISuggestion() {
       <el-tabs v-model="activeTab">
         <el-tab-pane :label="t('software.phpConfig.tabCommon')" name="common">
           <el-form label-width="180px" style="max-height: 420px; overflow-y: auto">
-            <el-form-item v-for="key in commonFields" :key="key" :label="key">
-              <el-input v-model="configForm[key]" />
+            <el-form-item v-for="key in commonFields" :key="key" :label="fieldLabel(key)">
+              <el-input v-model="configForm[key]" :placeholder="key" />
             </el-form-item>
             <el-empty v-if="!commonFields.length" :description="t('software.phpConfig.noCommonFields')" />
           </el-form>

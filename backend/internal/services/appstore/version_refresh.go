@@ -27,13 +27,25 @@ var phpStoreVersions = []string{
 }
 
 var phpDefaultConfig = map[string]interface{}{
-	"memory_limit":        "128M",
-	"upload_max_filesize": "50M",
-	"post_max_size":       "50M",
-	"max_execution_time":  "300",
-	"date.timezone":       "Asia/Shanghai",
-	"open_basedir":        "",
-	"disable_functions":   "exec,passthru,shell_exec,system,proc_open,popen",
+	"memory_limit":              "128M",
+	"upload_max_filesize":       "50M",
+	"post_max_size":             "50M",
+	"max_execution_time":        "300",
+	"max_input_time":            "300",
+	"max_input_vars":            "3000",
+	"max_file_uploads":          "20",
+	"date.timezone":             "Asia/Shanghai",
+	"open_basedir":              "",
+	"display_errors":            "Off",
+	"display_startup_errors":    "Off",
+	"log_errors":                "On",
+	"expose_php":                "Off",
+	"short_open_tag":            "Off",
+	"default_socket_timeout":    "60",
+	"opcache.enable":            "1",
+	"opcache.memory_consumption": "128",
+	"opcache.validate_timestamps": "1",
+	"disable_functions":         "exec,passthru,shell_exec,system,proc_open,popen",
 }
 
 var phpPortByVersion = map[string]int{

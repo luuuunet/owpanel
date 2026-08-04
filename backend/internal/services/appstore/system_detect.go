@@ -149,7 +149,8 @@ func systemPackagePresent(key, dataDir string) bool {
 		return false
 	}
 	if strings.HasPrefix(key, "php") && key != "phpmyadmin" {
-		return phpPanelInstalled(key, dataDir)
+		// Marker OR host-discovered FPM/binary — so Installed tab matches Runtime PHP list.
+		return phpPresent(key, dataDir)
 	}
 	if key == "pm2" {
 		return detectPM2() == "running"

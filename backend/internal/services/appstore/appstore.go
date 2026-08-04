@@ -66,27 +66,27 @@ var catalog = []catalogItem{
 	},
 	{
 		App: models.App{Key: "php85", Name: "PHP-8.5", Category: "运行环境", Versions: "8.5", Version: "8.5", Description: "PHP 8.5 运行环境", Port: 9000, InstallPath: "server/php/85", ConfigPath: "server/php/85/etc/php.ini", Icon: "Coffee"},
-		defaultConfig: map[string]interface{}{"memory_limit": "128M", "upload_max_filesize": "50M", "post_max_size": "50M", "max_execution_time": "300", "date.timezone": "Asia/Shanghai", "open_basedir": "", "disable_functions": "exec,passthru,shell_exec,system,proc_open,popen"},
+		defaultConfig: phpDefaultConfig,
 	},
 	{
 		App: models.App{Key: "php84", Name: "PHP-8.4", Category: "运行环境", Versions: "8.4", Version: "8.4", Description: "PHP 8.4 运行环境", Port: 9004, InstallPath: "server/php/84", ConfigPath: "server/php/84/etc/php.ini", Icon: "Coffee"},
-		defaultConfig: map[string]interface{}{"memory_limit": "128M", "upload_max_filesize": "50M", "post_max_size": "50M", "max_execution_time": "300", "date.timezone": "Asia/Shanghai", "open_basedir": "", "disable_functions": "exec,passthru,shell_exec,system,proc_open,popen"},
+		defaultConfig: phpDefaultConfig,
 	},
 	{
 		App: models.App{Key: "php83", Name: "PHP-8.3", Category: "运行环境", Versions: "8.3", Version: "8.3", Description: "PHP 8.3 运行环境", Port: 9000, InstallPath: "server/php/83", ConfigPath: "server/php/83/etc/php.ini", Icon: "Coffee"},
-		defaultConfig: map[string]interface{}{"memory_limit": "128M", "upload_max_filesize": "50M", "post_max_size": "50M", "max_execution_time": "300", "date.timezone": "Asia/Shanghai", "open_basedir": "", "disable_functions": "exec,passthru,shell_exec,system,proc_open,popen"},
+		defaultConfig: phpDefaultConfig,
 	},
 	{
 		App: models.App{Key: "php82", Name: "PHP-8.2", Category: "运行环境", Versions: "8.2", Version: "8.2", Description: "PHP 8.2 运行环境", Port: 9001, InstallPath: "server/php/82", ConfigPath: "server/php/82/etc/php.ini", Icon: "Coffee"},
-		defaultConfig: map[string]interface{}{"memory_limit": "128M", "upload_max_filesize": "50M", "post_max_size": "50M", "max_execution_time": "300", "date.timezone": "Asia/Shanghai", "open_basedir": "", "disable_functions": "exec,passthru,shell_exec,system,proc_open,popen"},
+		defaultConfig: phpDefaultConfig,
 	},
 	{
 		App: models.App{Key: "php81", Name: "PHP-8.1", Category: "运行环境", Versions: "8.1", Version: "8.1", Description: "PHP 8.1 运行环境", Port: 9002, InstallPath: "server/php/81", ConfigPath: "server/php/81/etc/php.ini", Icon: "Coffee"},
-		defaultConfig: map[string]interface{}{"memory_limit": "128M", "upload_max_filesize": "50M", "post_max_size": "50M", "max_execution_time": "300", "date.timezone": "Asia/Shanghai", "open_basedir": "", "disable_functions": "exec,passthru,shell_exec,system,proc_open,popen"},
+		defaultConfig: phpDefaultConfig,
 	},
 	{
 		App: models.App{Key: "php74", Name: "PHP-7.4", Category: "运行环境", Versions: "7.4", Version: "7.4", Description: "PHP 7.4 运行环境", Port: 9003, InstallPath: "server/php/74", ConfigPath: "server/php/74/etc/php.ini", Icon: "Coffee"},
-		defaultConfig: map[string]interface{}{"memory_limit": "128M", "upload_max_filesize": "50M", "post_max_size": "50M", "max_execution_time": "300", "date.timezone": "Asia/Shanghai", "open_basedir": "", "disable_functions": "exec,passthru,shell_exec,system,proc_open,popen"},
+		defaultConfig: phpDefaultConfig,
 	},
 	{
 		App: models.App{Key: "nodejs20", Name: "Node.js 20", Category: "运行环境", Versions: "20", Version: "20", Description: "Node.js 20 LTS 运行时（npm/nvm）", Port: 0, InstallPath: "server/nodejs/20", ConfigPath: "", Icon: "Platform"},
@@ -1057,7 +1057,12 @@ func (s *Service) GetConfig(key string) (map[string]interface{}, error) {
 	}
 	if IsPHPKey(key) {
 		mgr := php.NewManager(s.dataDir)
-		for _, k := range []string{"memory_limit", "upload_max_filesize", "post_max_size", "max_execution_time", "date.timezone", "open_basedir"} {
+		for _, k := range []string{
+			"memory_limit", "upload_max_filesize", "post_max_size", "max_execution_time",
+			"max_input_time", "max_input_vars", "max_file_uploads", "date.timezone", "open_basedir",
+			"display_errors", "display_startup_errors", "log_errors", "expose_php", "short_open_tag",
+			"default_socket_timeout", "opcache.enable", "opcache.memory_consumption", "opcache.validate_timestamps",
+		} {
 			if val := mgr.GetDirective(key, k); val != "" {
 				cfg[k] = val
 			}
@@ -1084,7 +1089,13 @@ func (s *Service) UpdateConfig(key string, cfg map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	if !app.Installed {
+	if IsPHPKey(key) {
+		if !phpPresent(key, s.dataDir) {
+			return errors.New("software not installed")
+		}
+		_ = s.ensurePHPAppInstalled(key)
+		app, _ = s.Get(key)
+	} else if !app.Installed {
 		return errors.New("software not installed")
 	}
 	apply := map[string]interface{}{}

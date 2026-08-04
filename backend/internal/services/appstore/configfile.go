@@ -47,11 +47,15 @@ func (s *Service) ReadConfigRaw(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if IsPHPKey(key) {
+		if !phpPresent(key, s.dataDir) {
+			return "", errors.New("software not installed")
+		}
+		_ = s.ensurePHPAppInstalled(key)
+		return php.NewManager(s.dataDir).ReadIni(key)
+	}
 	if !app.Installed {
 		return "", errors.New("software not installed")
-	}
-	if IsPHPKey(key) {
-		return php.NewManager(s.dataDir).ReadIni(key)
 	}
 	if isWebServerKey(key) {
 		return s.readWebServerConfig(key)
@@ -75,14 +79,18 @@ func (s *Service) WriteConfigRaw(key, content string) error {
 	if err != nil {
 		return err
 	}
-	if !app.Installed {
-		return errors.New("software not installed")
-	}
 	if IsPHPKey(key) {
+		if !phpPresent(key, s.dataDir) {
+			return errors.New("software not installed")
+		}
+		_ = s.ensurePHPAppInstalled(key)
 		if err := php.NewManager(s.dataDir).WriteIni(key, content); err != nil {
 			return err
 		}
 		return s.ServiceAction(key, "restart")
+	}
+	if !app.Installed {
+		return errors.New("software not installed")
 	}
 	if isWebServerKey(key) {
 		return s.writeWebServerConfig(key, content)
@@ -104,13 +112,13 @@ func (s *Service) PHPDetail(key string) (php.PHPDetail, error) {
 	if !IsPHPKey(key) {
 		return php.PHPDetail{}, errors.New("not a PHP runtime")
 	}
-	app, err := s.Get(key)
-	if err != nil {
+	if _, err := s.Get(key); err != nil {
 		return php.PHPDetail{}, err
 	}
-	if !app.Installed {
+	if !phpPresent(key, s.dataDir) {
 		return php.PHPDetail{}, errors.New("software not installed")
 	}
+	_ = s.ensurePHPAppInstalled(key)
 	return php.NewManager(s.dataDir).Detail(key)
 }
 
@@ -118,6 +126,10 @@ func (s *Service) SetPHPExtension(key, name string, enabled bool) error {
 	if !IsPHPKey(key) {
 		return errors.New("not a PHP runtime")
 	}
+	if !phpPresent(key, s.dataDir) {
+		return errors.New("software not installed")
+	}
+	_ = s.ensurePHPAppInstalled(key)
 	if err := php.NewManager(s.dataDir).SetExtension(key, name, enabled); err != nil {
 		return err
 	}
@@ -128,6 +140,10 @@ func (s *Service) InstallPHPExtension(key, name string) error {
 	if !IsPHPKey(key) {
 		return errors.New("not a PHP runtime")
 	}
+	if !phpPresent(key, s.dataDir) {
+		return errors.New("software not installed")
+	}
+	_ = s.ensurePHPAppInstalled(key)
 	if err := php.NewManager(s.dataDir).InstallExtension(key, name); err != nil {
 		return err
 	}
@@ -138,6 +154,10 @@ func (s *Service) SetPHPDisableFunctions(key, value string) error {
 	if !IsPHPKey(key) {
 		return errors.New("not a PHP runtime")
 	}
+	if !phpPresent(key, s.dataDir) {
+		return errors.New("software not installed")
+	}
+	_ = s.ensurePHPAppInstalled(key)
 	if err := php.NewManager(s.dataDir).SetDisableFunctions(key, value); err != nil {
 		return err
 	}
