@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # OWPanel — universal Linux installer (Ubuntu / Debian / CentOS / Rocky / AlmaLinux / RHEL)
-# install.sh version: 2026-06-19-1
+# install.sh version: 2026-08-05-1
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/owpanel}"
@@ -14,13 +14,31 @@ PANEL_USER="${PANEL_USER:-root}"
 FROM_SOURCE="${FROM_SOURCE:-0}"
 REPO_URL="${REPO_URL:-https://github.com/luuuunet/owpanel.git}"
 SOURCE_REF="${SOURCE_REF:-main}"
-RELEASE_VERSION="${RELEASE_VERSION:-v0.1.15}"
+# Prefer latest GitHub release; pin with RELEASE_VERSION=vX.Y.Z if needed.
+RELEASE_VERSION="${RELEASE_VERSION:-}"
 RELEASE_DIR="${RELEASE_DIR:-}"
+INSTALLER_VERSION="2026-08-05-1"
 
 export GIT_TERMINAL_PROMPT=0
 
 log() { echo "[owpanel] $*"; }
 die() { echo "[owpanel] ERROR: $*" >&2; exit 1; }
+
+# When piped via `curl | bash`, $0 is often "bash"/"-" — local relative paths break.
+script_dir() {
+  local s="${BASH_SOURCE[0]:-$0}"
+  if [[ "$s" == "bash" || "$s" == "-" || "$s" == "/dev/stdin" || "$s" == "sh" ]]; then
+    echo ""
+    return
+  fi
+  if [[ -f "$s" ]]; then
+    (cd "$(dirname "$s")" && pwd)
+    return
+  fi
+  echo ""
+}
+
+SCRIPT_DIR="$(script_dir)"
 
 require_root() {
   if [[ "$(id -u)" -ne 0 ]]; then
@@ -227,20 +245,59 @@ build_from_source() {
   log "构建完成"
 }
 
+resolve_release_version() {
+  if [[ -n "${RELEASE_VERSION}" ]]; then
+    return 0
+  fi
+  local slug v
+  slug="$(repo_slug)"
+  v="$(curl -fsSL --connect-timeout 10 --max-time 20 \
+    "https://api.github.com/repos/${slug}/releases/latest" 2>/dev/null \
+    | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v[^"]+"' \
+    | head -1 | grep -oE 'v[^"]+' || true)"
+  if [[ -z "$v" ]]; then
+    # Fallback if API is rate-limited: latest redirect asset path still works.
+    v="latest"
+  fi
+  RELEASE_VERSION="$v"
+  log "目标版本: ${RELEASE_VERSION}"
+}
+
+stack_fallback() {
+  local name="$1"
+  local candidates=(
+    "$INSTALL_DIR/scripts/stack/fallback.sh"
+  )
+  if [[ -n "$SCRIPT_DIR" ]]; then
+    candidates+=("$SCRIPT_DIR/stack/fallback.sh")
+    candidates+=("$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/scripts/stack/fallback.sh")
+  fi
+  local f
+  for f in "${candidates[@]}"; do
+    if [[ -f "$f" ]]; then
+      bash "$f" "$name"
+      return $?
+    fi
+  done
+  log "WARN: 未找到 stack/fallback.sh，跳过 $name 备用安装"
+  return 1
+}
+
 install_binary_layout() {
   mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/logs"
   chmod +x "$INSTALL_DIR/owpanel" 2>/dev/null || true
   ln -sf "$INSTALL_DIR/op" /usr/local/bin/op 2>/dev/null || true
   rm -f /usr/local/bin/bt "$INSTALL_DIR/bt" 2>/dev/null || true
   local stack_src=""
-  for candidate in \
-    "$(dirname "$0")/stack" \
-    "$(cd "$(dirname "$0")/.." && pwd)/scripts/stack"; do
-    if [[ -f "$candidate/fallback.sh" ]]; then
-      stack_src="$candidate"
-      break
-    fi
-  done
+  local candidate
+  if [[ -n "$SCRIPT_DIR" ]]; then
+    for candidate in "$SCRIPT_DIR/stack" "$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/scripts/stack"; do
+      if [[ -f "$candidate/fallback.sh" ]]; then
+        stack_src="$candidate"
+        break
+      fi
+    done
+  fi
   if [[ -n "$stack_src" ]]; then
     mkdir -p "$INSTALL_DIR/scripts"
     rm -rf "$INSTALL_DIR/scripts/stack"
@@ -250,19 +307,25 @@ install_binary_layout() {
     log "已安装 stack 备用脚本 → $INSTALL_DIR/scripts/stack"
     return 0
   fi
-  # Fallback: download from GitHub release or main branch
+  # Piped install / no local tree: download from GitHub release
   local dest="$INSTALL_DIR/scripts/stack"
   mkdir -p "$dest"
-  local urls=(
-    "https://github.com/luuuunet/owpanel/releases/download/${RELEASE_VERSION}/owpanel-stack-scripts.tar.gz"
+  local urls=()
+  if [[ -n "${RELEASE_VERSION}" && "${RELEASE_VERSION}" != "latest" ]]; then
+    urls+=("https://github.com/luuuunet/owpanel/releases/download/${RELEASE_VERSION}/owpanel-stack-scripts.tar.gz")
+  fi
+  urls+=(
     "https://github.com/luuuunet/owpanel/releases/latest/download/owpanel-stack-scripts.tar.gz"
   )
   local url
   for url in "${urls[@]}"; do
     if curl -fsSL --connect-timeout 30 --max-time 120 "$url" | tar -xzf - -C "$dest" 2>/dev/null; then
       find "$dest" -name '*.sh' -exec chmod +x {} \;
-      log "已从 GitHub 下载 stack 安装脚本 → $dest"
-      return 0
+      find "$dest" -name '*.sh' -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
+      if [[ -f "$dest/fallback.sh" ]]; then
+        log "已从 GitHub 下载 stack 安装脚本 → $dest"
+        return 0
+      fi
     fi
   done
   log "WARN: 未找到本地 stack 脚本，GitHub 下载亦失败；软件安装将尝试在线拉取 fallback.sh"
@@ -331,9 +394,9 @@ wait_for_store_catalog() {
 
 install_from_release() {
   local src="${RELEASE_DIR:-}"
-  if [[ -z "$src" ]]; then
+  if [[ -z "$src" && -n "$SCRIPT_DIR" ]]; then
     local script_root
-    script_root="$(cd "$(dirname "$0")/.." && pwd)"
+    script_root="$(cd "$SCRIPT_DIR/.." && pwd)"
     if [[ -f "$script_root/owpanel" && -d "$script_root/web" ]]; then
       src="$script_root"
     fi
@@ -363,16 +426,36 @@ install_from_github_release() {
   local slug pkg ver url tgz tmpdir versions v
   slug="$(repo_slug)"
   pkg="$(release_package_name)"
-  versions=("$RELEASE_VERSION")
+  resolve_release_version
+  versions=()
+  # Prefer "latest" redirect first (no API needed), then resolved tag.
+  versions+=("latest")
+  if [[ -n "${RELEASE_VERSION}" && "${RELEASE_VERSION}" != "latest" ]]; then
+    versions+=("$RELEASE_VERSION")
+  fi
   v="$(curl -fsSL --connect-timeout 10 --max-time 20 \
     "https://api.github.com/repos/${slug}/releases/latest" 2>/dev/null \
     | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v[^"]+"' \
     | head -1 | grep -oE 'v[^"]+' || true)"
-  if [[ -n "$v" && "$v" != "$RELEASE_VERSION" ]]; then
+  if [[ -n "$v" ]]; then
     versions+=("$v")
+    RELEASE_VERSION="$v"
   fi
+  # Deduplicate while preserving order
+  local seen="" uniq=()
   for ver in "${versions[@]}"; do
-    url="https://github.com/${slug}/releases/download/${ver}/${pkg}.tar.gz"
+    [[ " $seen " == *" $ver "* ]] && continue
+    seen+=" $ver"
+    uniq+=("$ver")
+  done
+  versions=("${uniq[@]}")
+
+  for ver in "${versions[@]}"; do
+    if [[ "$ver" == "latest" ]]; then
+      url="https://github.com/${slug}/releases/latest/download/${pkg}.tar.gz"
+    else
+      url="https://github.com/${slug}/releases/download/${ver}/${pkg}.tar.gz"
+    fi
     tgz="$(mktemp /tmp/owpanel-rel.XXXXXX.tar.gz)"
     log "快速安装：下载预编译包 ${ver} (${pkg})..."
     if curl -fL --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 5 \
@@ -389,7 +472,12 @@ install_from_github_release() {
       rm -rf "$INSTALL_DIR/web"
       cp -a "$root/web" "$INSTALL_DIR/web"
       rm -rf "$tmpdir"
-      log "预编译包安装完成（约 1–2 分钟）"
+      if [[ "$ver" != "latest" ]]; then
+        RELEASE_VERSION="$ver"
+      elif [[ -z "${RELEASE_VERSION}" || "${RELEASE_VERSION}" == "latest" ]]; then
+        RELEASE_VERSION="${v:-latest}"
+      fi
+      log "预编译包安装完成（${RELEASE_VERSION}，约 1–2 分钟）"
       return 0
     fi
     rm -f "$tgz"
@@ -424,7 +512,7 @@ install_web_server() {
         export DEBIAN_FRONTEND=noninteractive
         if ! apt-get install -y -qq nginx 2>/dev/null; then
           log "默认 apt 安装 Nginx 失败，尝试 stack 脚本 …"
-          bash "$(dirname "$0")/stack/fallback.sh" nginx
+          stack_fallback nginx || true
         fi
         ;;
       dnf|yum)
@@ -512,7 +600,7 @@ install_database() {
         && ! apt-get install -y -qq default-mysql-server 2>/dev/null \
         && ! apt-get install -y -qq mysql-server 2>/dev/null; then
         log "默认 apt 安装数据库失败，尝试 stack 脚本 …"
-        bash "$(dirname "$0")/stack/fallback.sh" mariadb
+        stack_fallback mariadb || true
       fi
       ;;
     dnf|yum)
@@ -697,7 +785,7 @@ print_install_summary() {
 main() {
   echo "========================================="
   echo "  OWPanel Linux Installer"
-  echo "  installer: 2026-06-19-1 (stack: ${INSTALL_STACK})"
+  echo "  installer: ${INSTALLER_VERSION} (stack: ${INSTALL_STACK})"
   echo "========================================="
   require_root
   detect_os
@@ -705,6 +793,7 @@ main() {
   mkdir -p "$INSTALL_DIR"
   if install_from_release; then
     log "Installed from local release bundle"
+    resolve_release_version || true
   elif install_from_github_release; then
     :
   elif [[ "$FROM_SOURCE" == "1" ]] || [[ ! -f "$INSTALL_DIR/owpanel" ]]; then

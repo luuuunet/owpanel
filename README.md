@@ -84,16 +84,22 @@ Aggregates panel, system, site, CDN, and WAF logs — with AI analysis and fix s
 
 ## ⚡ Quick install
 
-One line — downloads a **prebuilt binary** (~16 MB, ~1–2 minutes on a 1 GB VPS):
+One line — downloads the **latest prebuilt binary** (~17 MB, ~1–2 minutes on a 1 GB VPS):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/luuuunet/owpanel/v0.1.15/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/luuuunet/owpanel/main/scripts/install.sh | sudo bash
+```
+
+Panel only (skip LNMP runtime stack):
+
+```bash
+INSTALL_STACK=none curl -fsSL https://raw.githubusercontent.com/luuuunet/owpanel/main/scripts/install.sh | sudo bash
 ```
 
 Force build from source (slower on small VPS, ~15–30 minutes):
 
 ```bash
-FROM_SOURCE=1 curl -fsSL https://raw.githubusercontent.com/luuuunet/owpanel/v0.1.15/scripts/install.sh | sudo bash
+FROM_SOURCE=1 curl -fsSL https://raw.githubusercontent.com/luuuunet/owpanel/main/scripts/install.sh | sudo bash
 ```
 
 Or clone the repo and install:
