@@ -24,7 +24,10 @@ func (s *Server) registerWAFRoutes(authorized *gin.RouterGroup) {
 	authorized.GET("/waf/blacklist", s.handleListIPBlacklist)
 	authorized.POST("/waf/blacklist", s.handleAddIPBlacklist)
 	authorized.POST("/waf/blacklist/import", s.handleImportIPBlacklist)
+	authorized.POST("/waf/block", s.handleWAFQuickBlock)
 	authorized.DELETE("/waf/blacklist/:id", s.handleDeleteIPBlacklist)
+	authorized.GET("/waf/autoban/status", s.handleWAFAutoBanStatus)
+	authorized.POST("/waf/autoban/run", s.handleWAFAutoBanRun)
 	authorized.GET("/waf/whitelist", s.handleListIPWhitelist)
 	authorized.POST("/waf/whitelist", s.handleAddIPWhitelist)
 	authorized.POST("/waf/whitelist/import", s.handleImportIPWhitelist)
@@ -183,6 +186,35 @@ func (s *Server) handleAddIPBlacklist(c *gin.Context) {
 		return
 	}
 	response.OK(c, entry)
+}
+
+func (s *Server) handleWAFQuickBlock(c *gin.Context) {
+	var req struct {
+		Text   string `json:"text"`
+		Reason string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		response.Error(c, 400, "请输入 IP、IP 段、CIDR 或 ASN")
+		return
+	}
+	response.OK(c, s.waf.QuickBlock(req.Text, req.Reason, "manual"))
+}
+
+func (s *Server) handleWAFAutoBanStatus(c *gin.Context) {
+	response.OK(c, s.waf.AutoBanStatus())
+}
+
+func (s *Server) handleWAFAutoBanRun(c *gin.Context) {
+	result, err := s.waf.RunAutoBan()
+	if err != nil {
+		response.Error(c, 500, err.Error())
+		return
+	}
+	response.OK(c, result)
 }
 
 func (s *Server) handleImportIPBlacklist(c *gin.Context) {

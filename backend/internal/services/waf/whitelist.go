@@ -59,7 +59,9 @@ func (s *Service) writeWhitelistMap() error {
 	var b strings.Builder
 	b.WriteString("# OWPanel IP whitelist map — auto generated\n")
 	for _, item := range list {
-		b.WriteString(fmt.Sprintf("%s 1;\n", item.IP))
+		for _, key := range s.expandStoredBlock(item.IP) {
+			b.WriteString(fmt.Sprintf("%s 1;\n", key))
+		}
 	}
 	return os.WriteFile(s.WhitelistMapPath(), []byte(b.String()), 0644)
 }
