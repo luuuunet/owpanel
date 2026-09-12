@@ -262,7 +262,12 @@ func (m *Manager) writeNginxMainInclude() {
 	_ = os.MkdirAll(vhostDir, 0755)
 	mainConf := filepath.Join(m.dataDir, "nginx", "owpanel.conf")
 	includeLine := fmt.Sprintf("include %s/*.conf;", filepath.ToSlash(vhostDir))
-	content := fmt.Sprintf("# OWPanel auto-generated\n%s\n", includeLine)
+	wafConf := filepath.Join(m.dataDir, "security", "owpanel-waf.conf")
+	wafLine := ""
+	if _, err := os.Stat(wafConf); err == nil {
+		wafLine = fmt.Sprintf("include %s;\n", filepath.ToSlash(wafConf))
+	}
+	content := fmt.Sprintf("# OWPanel auto-generated\n%s%s\n", wafLine, includeLine)
 	_ = os.WriteFile(mainConf, []byte(content), 0644)
 }
 

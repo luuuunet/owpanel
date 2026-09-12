@@ -143,6 +143,7 @@ type Server struct {
 
 func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 	wafSvc := waf.NewService(db, cfg.DataDir)
+	wafSvc.StartAutoBan()
 	edgeWorkerSvc := edgeworker.NewService(db, cfg.DataDir)
 	edgeKVSvc := edgekv.NewService(db)
 	edgeD1Svc := edged1.NewService(db, cfg.DataDir)

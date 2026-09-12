@@ -471,6 +471,10 @@ type SecurityConfig struct {
 
 	LogFormatEnabled bool   `gorm:"default:true" json:"log_format_enabled"`
 	SecurityLogPath  string `gorm:"size:512" json:"security_log_path"`
+
+	AutoBanEnabled   bool `gorm:"default:false" json:"auto_ban_enabled"`
+	AutoBanThreshold int  `gorm:"default:20" json:"auto_ban_threshold"`
+	AutoBanWindowSec int  `gorm:"default:300" json:"auto_ban_window_sec"`
 }
 
 // CacheConfig 全局 CDN 缓存（Nginx proxy_cache / fastcgi_cache）
@@ -517,7 +521,7 @@ type IPBlacklist struct {
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-	IP        string         `gorm:"uniqueIndex;size:64" json:"ip"`
+	IP        string         `gorm:"uniqueIndex;size:128" json:"ip"`
 	Reason    string         `gorm:"size:255" json:"reason"`
 	Source    string         `gorm:"size:32;default:manual" json:"source"`
 	Enabled   bool           `gorm:"default:true" json:"enabled"`

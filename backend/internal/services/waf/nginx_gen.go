@@ -93,6 +93,7 @@ func (s *Service) Apply() (*ApplyResult, error) {
 	}
 	_ = s.writeBlacklistMap()
 	_ = s.writeWhitelistMap()
+	s.ensureHTTPInclude()
 
 	if cfg, _ := s.GetConfig(); cfg != nil && cfg.LogFormatEnabled {
 		logConf := generateLogFormat(cfg)
@@ -279,9 +280,8 @@ func (s *Service) generateNginx(cfg *models.SecurityConfig, rules []models.WAFRu
 		b.WriteString("map \"$op_whitelisted$op_bad_header\" $op_deny_header {\n    default 0;\n    \"01\" 1;\n}\n")
 	}
 
-	b.WriteString("\n# ── server 块内 include 以下片段 ──\n")
-	b.WriteString("# include " + nginxPath(s.confSnippetPath()) + ";\n\n")
-	b.WriteString(s.generateServerSnippet(cfg))
+	b.WriteString("\n# server context: include " + nginxPath(s.confSnippetPath()) + ";\n")
+	_ = os.WriteFile(s.confSnippetPath(), []byte(s.generateServerSnippet(cfg)), 0644)
 	return b.String()
 }
 
@@ -519,7 +519,42 @@ func (s *Service) StatusSummary() map[string]interface{} {
 		"conf_exists":     fileExists(s.ConfPath()),
 		"edge_policies":   edgePolicies,
 		"crawler_rules":   s.CrawlerRulesSummary(),
+		"auto_ban":        cfg != nil && cfg.AutoBanEnabled,
 	}
+}
+
+func (s *Service) ensureHTTPInclude() {
+	panelConf := filepath.Join(s.dataDir, "nginx", "owpanel.conf")
+	wafLine := "include " + nginxPath(s.ConfPath()) + ";"
+	data, err := os.ReadFile(panelConf)
+	if err != nil {
+		_ = os.MkdirAll(filepath.Dir(panelConf), 0755)
+		vhostDir := filepath.Join(s.dataDir, "nginx", "vhosts")
+		content := "# OWPanel auto-generated\n" + wafLine + "\ninclude " + nginxPath(vhostDir) + "/*.conf;\n"
+		_ = os.WriteFile(panelConf, []byte(content), 0644)
+		return
+	}
+	content := string(data)
+	if strings.Contains(content, "owpanel-waf.conf") {
+		return
+	}
+	_ = os.WriteFile(panelConf, []byte(wafLine+"\n"+content), 0644)
+}
+
+func (s *Service) reloadNginxMaps() error {
+	for _, bin := range []string{"openresty", "nginx"} {
+		path, err := exec.LookPath(bin)
+		if err != nil {
+			continue
+		}
+		if out, err := exec.Command(path, "-t").CombinedOutput(); err != nil {
+			return fmt.Errorf("%s -t: %v (%s)", bin, err, strings.TrimSpace(string(out)))
+		}
+		if err := exec.Command(path, "-s", "reload").Run(); err == nil {
+			return nil
+		}
+	}
+	return nil
 }
 
 func fileExists(p string) bool {

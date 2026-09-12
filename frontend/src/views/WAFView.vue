@@ -12,7 +12,7 @@ const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: fa
 
 const { t, locale } = useI18n()
 
-const activeTab = ref('rate')
+const activeTab = ref('block')
 const loading = ref(false)
 const applying = ref(false)
 const preview = ref('')
@@ -71,6 +71,9 @@ const config = reactive({
   referrer_policy: 'strict-origin-when-cross-origin',
   log_format_enabled: true,
   security_log_path: '',
+  auto_ban_enabled: false,
+  auto_ban_threshold: 20,
+  auto_ban_window_sec: 300,
 })
 
 const countryLabel = computed(() => (c: { code: string; name: string; zh: string }) =>
@@ -282,10 +285,44 @@ async function addBlacklist() {
 }
 
 async function importBlacklist() {
-  const res: any = await api.post('/waf/blacklist/import', { text: blBatch.value, reason: 'batch' })
-  ElMessage.success(t('waf.imported', { n: res.data?.imported || 0 }))
+  await quickBlockFrom(blBatch.value)
   blBatch.value = ''
-  loadAll()
+}
+
+async function quickBlockFrom(text: string) {
+  const value = text.trim()
+  if (!value) {
+    ElMessage.warning(t('waf.blockEmpty'))
+    return
+  }
+  quickBlocking.value = true
+  try {
+    const res: any = await api.post('/waf/block', { text: value, reason: 'manual' }, { timeout: 60000 })
+    const d = res.data || {}
+    const fail = (d.failed || []).length
+    ElMessage.success(t('waf.blockDone', { n: d.blocked || 0, asns: d.asns || 0, fail }))
+    if (fail) ElMessage.warning((d.failed || []).slice(0, 3).join('；'))
+    quickBlockText.value = ''
+    await loadAll()
+  } catch (e: unknown) {
+    ElMessage.error(resolveApiError(e, t('common.failed')))
+  } finally {
+    quickBlocking.value = false
+  }
+}
+
+async function runAutoBan() {
+  autoBanRunning.value = true
+  try {
+    await api.put('/waf/config', config)
+    const res: any = await api.post('/waf/autoban/run', {}, { timeout: 60000 })
+    ElMessage.success(res.data?.message || t('common.success'))
+    loadAll()
+  } catch (e: unknown) {
+    ElMessage.error(resolveApiError(e, t('common.failed')))
+  } finally {
+    autoBanRunning.value = false
+  }
 }
 
 async function deleteBlacklist(id: number) {
@@ -356,6 +393,9 @@ const ruleForm = ref({ name: '', type: 'uri', pattern: '', action: 'block', enab
 const ruleDialog = ref(false)
 const blForm = ref({ ip: '', reason: '' })
 const blBatch = ref('')
+const quickBlockText = ref('')
+const quickBlocking = ref(false)
+const autoBanRunning = ref(false)
 const wlForm = ref({ ip: '', reason: '' })
 const wlBatch = ref('')
 
@@ -525,6 +565,43 @@ onMounted(async () => {
     </el-card>
 
     <el-tabs v-model="activeTab" type="border-card">
+      <el-tab-pane :label="t('waf.tab.block')" name="block">
+        <p class="block-lead">{{ t('waf.blockLead') }}</p>
+        <el-input
+          v-model="quickBlockText"
+          type="textarea"
+          :rows="8"
+          class="block-box"
+          :placeholder="t('waf.blockPlaceholder')"
+        />
+        <div class="block-actions">
+          <el-button type="danger" :loading="quickBlocking" @click="quickBlockFrom(quickBlockText)">
+            {{ t('waf.blockNow') }}
+          </el-button>
+          <el-button type="primary" :loading="applying" @click="applyConfig">{{ t('waf.apply') }}</el-button>
+        </div>
+        <el-table :data="blacklist" stripe style="margin-top: 16px" max-height="320">
+          <el-table-column prop="ip" :label="t('waf.ip')" min-width="200" />
+          <el-table-column prop="reason" :label="t('waf.reason')" />
+          <el-table-column prop="source" :label="t('waf.source')" width="100" />
+          <el-table-column :label="t('common.actions')" width="100">
+            <template #default="{ row }">
+              <el-button type="danger" text size="small" @click="deleteBlacklist(row.id)">{{ t('common.delete') }}</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-divider />
+        <el-form label-width="180px" style="max-width: 560px">
+          <el-form-item :label="t('waf.autoBanEnabled')"><el-switch v-model="config.auto_ban_enabled" /></el-form-item>
+          <el-form-item :label="t('waf.autoBanThreshold')"><el-input-number v-model="config.auto_ban_threshold" :min="3" :max="1000" /></el-form-item>
+          <el-form-item :label="t('waf.autoBanWindow')"><el-input-number v-model="config.auto_ban_window_sec" :min="60" :max="86400" /></el-form-item>
+          <el-form-item>
+            <el-button :loading="autoBanRunning" @click="runAutoBan">{{ t('waf.autoBanRun') }}</el-button>
+          </el-form-item>
+          <el-alert :title="t('waf.autoBanHint')" type="info" :closable="false" show-icon />
+        </el-form>
+      </el-tab-pane>
+
       <el-tab-pane :label="t('waf.tab.rate')" name="rate">
         <el-form label-width="140px" style="max-width: 560px">
           <el-form-item :label="t('waf.enabled')"><el-switch v-model="config.rate_limit_enabled" /></el-form-item>
@@ -889,6 +966,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.block-lead { margin: 0 0 10px; font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.6; }
+.block-box { margin-bottom: 12px; }
+.block-box :deep(textarea) { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.block-actions { display: flex; gap: 10px; margin-bottom: 8px; }
 .header-actions { display: flex; gap: 10px; }
 .status-overview-title { font-weight: 600; font-size: 15px; }
 .status-item {

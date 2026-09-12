@@ -163,15 +163,23 @@ func (s *Service) renderServerBlock(site *models.Website, root string, port int,
     server_name %s;
     root %s;
     %s;
-%s%s%s%s%s%s
+%s%s%s%s%s%s%s
     access_log %s;
     error_log %s;%s%s
 %s%s%s%s%s%s%s%s
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?|webp|avif|mp4|webm|pdf|zip|bmp)$ {
         access_log off;%s%s
     }
-}`, listenLine, names, root, indexLine, sslLines, features.access, features.geo, features.bots, features.traffic, acmeBlock,
+}`, listenLine, names, root, indexLine, sslLines, s.wafServerInclude(), features.access, features.geo, features.bots, features.traffic, acmeBlock,
 		accessLog, errorLog, cacheAccessLog, features.crossSite, cacheServer, rewriteBlock, extraBlock, features.subdirs, cacheRuleLocs, edgeWorkerBlock, locationBlock, phpBlock, cacheStatic, features.staticEx), nil
+}
+
+func (s *Service) wafServerInclude() string {
+	p := filepath.Join(s.dataDir, "security", "server_security.conf")
+	if _, err := os.Stat(p); err != nil {
+		return ""
+	}
+	return "\n    include " + filepath.ToSlash(p) + ";"
 }
 
 func (s *Service) indexConfig(site *models.Website) (indexLine, tryFallback string) {

@@ -18,7 +18,10 @@ type Service struct {
 func NewService(db *gorm.DB, dataDir string) *Service {
 	confDir := filepath.Join(dataDir, "security")
 	_ = os.MkdirAll(confDir, 0755)
-	return &Service{db: db, dataDir: dataDir, confDir: confDir}
+	s := &Service{db: db, dataDir: dataDir, confDir: confDir}
+	s.ensureStubFiles()
+	s.ensureHTTPInclude()
+	return s
 }
 
 func (s *Service) ConfPath() string {
@@ -74,6 +77,17 @@ func defaultConfig(dataDir string) models.SecurityConfig {
 		LogFormatEnabled: true,
 		SecurityLogPath:  settings.DefaultSecurityLogPath(dataDir),
 		GeoMode:          "block",
+		AutoBanThreshold: 20,
+		AutoBanWindowSec: 300,
+	}
+}
+
+func (s *Service) ensureStubFiles() {
+	for _, p := range []string{s.ConfPath(), s.confSnippetPath(), s.BlacklistMapPath(), s.WhitelistMapPath()} {
+		if _, err := os.Stat(p); err == nil {
+			continue
+		}
+		_ = os.WriteFile(p, []byte("# OWPanel security stub\n"), 0644)
 	}
 }
 
