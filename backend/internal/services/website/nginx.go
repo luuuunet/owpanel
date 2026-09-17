@@ -31,6 +31,10 @@ func (s *Service) writeNginxVhost(site *models.Website) (string, error) {
 	confPath := filepath.Join(confDir, confFileName(site.Domain))
 	root := filepath.ToSlash(site.RootPath)
 
+	if s.db != nil && site.ID != 0 {
+		s.reloadAliases(site)
+	}
+
 	entries := s.allDomainEntries(site)
 	if len(entries) == 0 {
 		entries = []domainEntry{{Host: site.Domain, Port: site.Port}}
@@ -39,7 +43,7 @@ func (s *Service) writeNginxVhost(site *models.Website) (string, error) {
 
 	certOK := false
 	if site.SSL {
-		_, _, certOK = sslpkg.CertPaths(s.dataDir, site.Domain)
+		_, _, certOK = s.resolveSslCert(site, site.Domain)
 		if !certOK {
 			log.Printf("[website] SSL enabled for %s but certificate files missing; generating HTTP-only vhost", site.Domain)
 		}
@@ -240,23 +244,59 @@ func (s *Service) mainLocationBlock(site *models.Website, tryFallback, cacheProx
     }`, httpsGate, tryFallback, cacheRoot)
 }
 
+func sslHostnames(site *models.Website) []string {
+	seen := map[string]bool{}
+	var hosts []string
+	add := func(h string) {
+		h = strings.TrimSpace(h)
+		if h == "" || seen[h] {
+			return
+		}
+		seen[h] = true
+		hosts = append(hosts, h)
+	}
+	add(site.Domain)
+	for _, a := range site.Aliases {
+		add(a.Domain)
+	}
+	return hosts
+}
+
+func (s *Service) resolveSslCert(site *models.Website, primary string) (fullchain, privkey string, ok bool) {
+	candidates := make([]string, 0, 1+len(site.Aliases))
+	candidates = append(candidates, primary, site.Domain)
+	for _, a := range site.Aliases {
+		candidates = append(candidates, a.Domain)
+	}
+	tried := map[string]bool{}
+	for _, d := range candidates {
+		d = strings.TrimSpace(d)
+		if d == "" || tried[d] {
+			continue
+		}
+		tried[d] = true
+		if f, p, found := sslpkg.CertPaths(s.dataDir, d); found {
+			return f, p, true
+		}
+	}
+	return "", "", false
+}
+
 func (s *Service) sslServerBlock(site *models.Website, root, primary string, features *nginxFeatureBlocks) (string, error) {
-	fullchain, privkey, ok := sslpkg.CertPaths(s.dataDir, primary)
+	if s.db != nil && site.ID != 0 {
+		s.reloadAliases(site)
+	}
+	fullchain, privkey, ok := s.resolveSslCert(site, primary)
 	if !ok {
 		return "", nil
 	}
 	fullchain = filepath.ToSlash(fullchain)
 	privkey = filepath.ToSlash(privkey)
-	names := primary
-	if len(site.Aliases) == 0 {
-		s.db.Where("website_id = ?", site.ID).Find(&site.Aliases)
+	hosts := sslHostnames(site)
+	if len(hosts) == 0 {
+		hosts = []string{primary}
 	}
-	for _, a := range site.Aliases {
-		if a.Type != "primary" {
-			names += " " + a.Domain
-		}
-	}
-	block, err := s.renderServerBlock(site, root, 443, strings.Fields(names), sslOpts{
+	block, err := s.renderServerBlock(site, root, 443, hosts, sslOpts{
 		enabled: true, fullchain: fullchain, privkey: privkey,
 	}, features, false)
 	if err != nil {

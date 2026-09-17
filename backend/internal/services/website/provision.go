@@ -417,12 +417,19 @@ func (s *Service) loadAliases(websiteID uint) []models.WebsiteAlias {
 }
 
 func (s *Service) allDomainEntries(site *models.Website) []domainEntry {
-	if len(site.Aliases) == 0 {
-		s.db.Where("website_id = ?", site.ID).Find(&site.Aliases)
+	if s.db != nil && site.ID != 0 {
+		s.reloadAliases(site)
 	}
 	var entries []domainEntry
 	for _, a := range site.Aliases {
-		entries = append(entries, domainEntry{Host: a.Domain, Port: a.Port})
+		port := a.Port
+		if port <= 0 {
+			port = site.Port
+		}
+		if port <= 0 {
+			port = 80
+		}
+		entries = append(entries, domainEntry{Host: a.Domain, Port: port})
 	}
 	return entries
 }

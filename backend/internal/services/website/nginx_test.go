@@ -1,6 +1,8 @@
 package website
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -72,5 +74,48 @@ func TestApacheServerNames(t *testing.T) {
 	}
 	if alias != "www.a.com b.a.com" {
 		t.Fatalf("ServerAlias=%q", alias)
+	}
+}
+
+func TestSslHostnamesIncludesAllAliases(t *testing.T) {
+	site := &models.Website{
+		Domain: "example.com",
+		Aliases: []models.WebsiteAlias{
+			{Domain: "example.com", Type: "primary", Port: 80},
+			{Domain: "www.example.com", Type: "alias", Port: 80},
+			{Domain: "tmt1.example.com", Type: "alias", Port: 80},
+		},
+	}
+	hosts := sslHostnames(site)
+	joined := strings.Join(hosts, " ")
+	for _, want := range []string{"example.com", "www.example.com", "tmt1.example.com"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %s in %v", want, hosts)
+		}
+	}
+}
+
+func TestResolveSslCertFallsBackToPrimaryWhenAliasHasNone(t *testing.T) {
+	dir := t.TempDir()
+	certDir := filepath.Join(dir, "ssl", "example.com")
+	if err := os.MkdirAll(certDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(certDir, "fullchain.pem"), []byte("c"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(certDir, "privkey.pem"), []byte("k"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Service{dataDir: dir}
+	site := &models.Website{
+		Domain: "example.com",
+		Aliases: []models.WebsiteAlias{
+			{Domain: "tmt1.example.com", Type: "alias"},
+		},
+	}
+	_, _, ok := s.resolveSslCert(site, "example.com")
+	if !ok {
+		t.Fatal("expected to reuse primary certificate for aliases")
 	}
 }
